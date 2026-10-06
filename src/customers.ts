@@ -94,16 +94,30 @@ export function pickJob(day: number, rand: () => number = Math.random): JobKind 
   return r < moonChance + (1 - moonChance) / 2 ? 'hole' : 'cheek';
 }
 
+export interface CustomerOptions {
+  /** Force a job type (Demo Day, tutorial). */
+  job?: JobKind;
+  /** Force a trait by label, e.g. 'Calm as a cucumber'. */
+  trait?: string;
+  /** Force a design by id. */
+  design?: string;
+}
+
 /**
  * Build one customer. `day` raises the baseline squirm so later days get harder.
  * `avoid` lets the day planner skip designs already used today.
  */
-export function makeCustomer(day: number, rand: () => number = Math.random, avoid: string[] = []): Customer {
-  const kind = pickJob(day, rand);
+export function makeCustomer(
+  day: number,
+  rand: () => number = Math.random,
+  avoid: string[] = [],
+  opts: CustomerOptions = {},
+): Customer {
+  const kind = opts.job ?? pickJob(day, rand);
   const all = designsFor(kind);
   const pool = all.filter((d) => !avoid.includes(d.id));
-  const design = pick(pool.length ? pool : all, rand);
-  const trait = pick(TRAITS, rand);
+  const design = all.find((d) => d.id === opts.design) ?? pick(pool.length ? pool : all, rand);
+  const trait = TRAITS.find((t) => t.label === opts.trait) ?? pick(TRAITS, rand);
   const skin = pick(SKINS, rand);
   const dayPressure = Math.min(0.35, (day - 1) * 0.07);
   const openers = rand() < 0.6 ? OPENERS[kind] : OPENERS.any;

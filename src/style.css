@@ -105,6 +105,8 @@ html, body {
 .meter label { color: var(--muted); }
 .bar { height: 10px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
 .bar > div { height: 100%; width: 100%; background: var(--yellow); transition: width 0.1s linear; }
+.bar.pain.danger { animation: danger 0.4s ease-in-out infinite alternate; }
+@keyframes danger { to { box-shadow: 0 0 0 2px var(--red), 0 0 12px var(--red); } }
 .bar.pain > div { background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); width: 0; }
 
 .brushes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -202,6 +204,13 @@ kbd {
   line-height: 1;
 }
 .card h2 { margin: 0 0 6px; font-size: 26px; }
+.logo-wrap { text-align: center; }
+.logo {
+  width: min(100%, 440px);
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 18px rgba(255, 63, 164, 0.45));
+}
+.tagline { text-align: center; margin-top: 4px; }
 .card p { color: var(--muted); line-height: 1.5; }
 .card .quote {
   background: #fff;

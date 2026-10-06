@@ -13,6 +13,13 @@ Built with **Three.js + TypeScript + Vite**. Runs in any modern browser, desktop
 to `main`. One-time setup: **Settings → Pages → Source: GitHub Actions**. The game then
 lives at `https://<owner>.github.io/<repo>/`.
 
+## Modes
+
+- **Demo Day** (title screen, recommended for showing people): three scripted clients, one of each job type, about 3 minutes.
+- **Open the shop**: the full game. Five random clients a day, with each day squirmier and shorter on time. The very first client is always an easy one.
+
+After any job, **📸 Share** makes a 1080×1350 result card (your work vs. the request, grade, client quote). On phones it opens the share sheet; on desktop it downloads.
+
 ## Job types
 
 | Job | Camera | Designs | Twist |
@@ -52,10 +59,20 @@ npm run build      # typecheck + production build to dist/
 `src/scoring.ts` is pure, DOM-free and unit-tested.
 
 1. The reference design is rasterized into the same UV canvas space the player paints in, at the job's scale.
+   Tolerance is about 0.6 of a line-width; the score curve is `F1^1.6`. Both were tuned with a simulated player (see below).
 2. Ink and design are both reduced to 128×128 binary masks over the job's crop square (tight for Hole Jobs, wide for Cheek/Full Moon). Ink outside the crop counts as stray.
 3. **Accuracy (precision)**: how much of your ink lands within about one line-width of the design. This catches scribbling and flooding.
 4. **Coverage (recall)**: how much of the design has ink within that tolerance. This catches half-finished work.
-5. **Likeness** = F1 of the two, curved slightly downward (`f1^1.2`). Grades run S / A / B / C / D / F. Under 30% means the client refuses to pay.
+5. **Likeness** = F1 of the two, curved downward (`f1^1.6`). Grades run S / A / B / C / D / F. Under 30% means the client refuses to pay.
+
+### Tuning baseline (simulated player, Demo Day)
+
+| Hand | Big Heart (cheek) | Bird's-Eye View (hole) | Phoenix Rising (moon) |
+|---|---|---|---|
+| Steady (±0.5 line-width wobble) | 88% A | 95% S | 70% B |
+| Sloppy (±1.3 line-width wobble) | 71% B | 86% A | 62% C |
+
+The simulator runs on a software GPU at a few FPS, so client squirm and winks barely act during its strokes. Real play at 60 FPS is harder, especially Hole Jobs.
 
 ## Architecture
 
@@ -69,6 +86,8 @@ src/
   jobs.ts       Hole / Cheek / Full Moon job specs (scale, zoom, tolerance, pay)
   customers.ts  customer generation, traits, reactions, Yelp-style reviews
   portrait.ts   procedural 32×32 pixel-art faces with live moods
+  logo.ts       bitmap-font pixel logo + butt mascot
+  share.ts      1080×1350 share card, Web Share API with download fallback
   scoring.ts    tolerant precision/recall scoring (pure)
   audio.ts      procedural tattoo-gun buzz + yelp (WebAudio, no assets)
 tests/
@@ -100,6 +119,14 @@ Design decisions worth knowing:
 - [x] Waddle-in / waddle-out
 - [x] GitHub Pages deploy
 
+**Phase 1.6: Demo-ready**
+- [x] Walk-in, pants drop, bend-over cutscene; stand up and waddle out
+- [x] Bolder hole that reads in the wide shot
+- [x] Pixel logo title screen
+- [x] Demo Day mode and an easy first client
+- [x] Share card
+- [x] Difficulty pass: tighter scoring, flinch interrupts instead of streaking, slower pain, hole clients hold stiller, auto needle per job
+
 **Phase 2: Depth**
 - [ ] Ink colors and fill/shading designs (score per color channel)
 - [ ] Shop upgrades: steadier hands, numbing cream (slows pain), stencil transfer (faint guide on the skin)
@@ -107,10 +134,8 @@ Design decisions worth knowing:
 - [ ] Stencil-free "freestyle" requests judged by a looser shape metric (e.g. Hu moments)
 
 **Phase 3: Juice**
-- [ ] Bend-over animation (they currently waddle in pre-bent)
 - [ ] Hand-mirror reveal cinematic and reaction faces
 - [ ] Sound pass: shop ambience, voice barks
-- [ ] Shareable result cards (export PNG)
 
 **Phase 4: Content**
 - [ ] Text tattoos ("MOM", "EXIT ONLY") with glyph-aware scoring

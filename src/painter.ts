@@ -38,7 +38,7 @@ const INK = 'rgba(18, 20, 34, 0.94)';
  * notch between them at the bottom. Everything outside is alpha 0 and gets cut by
  * the material's alphaTest. Matches the dome footprints in scene.ts#cheekHeight.
  */
-function silhouettePath(): Path2D {
+export function silhouettePath(): Path2D {
   const p = new Path2D();
   // Lower back, tapering slightly at the waist.
   p.moveTo(118, 30);
@@ -71,6 +71,10 @@ function pixelateInPlace(ctx: CanvasRenderingContext2D, pixels: number): void {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(small.canvas, 0, 0, TEX_SIZE, TEX_SIZE);
   ctx.imageSmoothingEnabled = true;
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  return `#${new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString()}`;
 }
 
 function shade(hex: string, amount: number): string {
@@ -168,32 +172,38 @@ export class SkinPainter {
     // in the close-up: it's the star of the show.
     const d = this.detail;
     d.clearRect(0, 0, S, S);
-    // The landmark. Cartoon-style: a dusky spot with radiating wrinkles.
-    const spot = d.createRadialGradient(mid, mid, 0, mid, mid, 28);
-    spot.addColorStop(0, shade(c.skin, -0.75));
-    spot.addColorStop(0.35, shade(c.skin, -0.45));
+    // The landmark. Bold and cartoony so it reads even in the wide shot: a dark core,
+    // a mauve pucker ring, and thick radiating wrinkles.
+    const spot = d.createRadialGradient(mid, mid, 0, mid, mid, 34);
+    spot.addColorStop(0, shade(c.skin, -0.92));
+    spot.addColorStop(0.3, shade(c.skin, -0.7));
+    spot.addColorStop(0.65, mixHex(shade(c.skin, -0.35), '#b0607a', 0.35));
     spot.addColorStop(1, shade(c.skin, -0.2) + '00');
     d.fillStyle = spot;
     d.beginPath();
-    d.arc(mid, mid, 28, 0, Math.PI * 2);
+    d.arc(mid, mid, 34, 0, Math.PI * 2);
     d.fill();
-    d.strokeStyle = shade(c.skin, -0.6);
+    d.strokeStyle = shade(c.skin, -0.8);
     d.lineCap = 'round';
-    d.lineWidth = 3;
-    for (let i = 0; i < 11; i++) {
-      const a = (i / 11) * Math.PI * 2 + Math.random() * 0.2;
-      const r0 = 4;
-      const r1 = 13 + Math.random() * 7;
+    d.lineWidth = 3.5;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.15;
+      const r0 = 3;
+      const r1 = 15 + Math.random() * 8;
       d.beginPath();
       d.moveTo(mid + Math.cos(a) * r0, mid + Math.sin(a) * r0);
       d.quadraticCurveTo(
-        mid + Math.cos(a + 0.15) * (r0 + r1) * 0.5,
-        mid + Math.sin(a + 0.15) * (r0 + r1) * 0.5,
+        mid + Math.cos(a + 0.18) * (r0 + r1) * 0.5,
+        mid + Math.sin(a + 0.18) * (r0 + r1) * 0.5,
         mid + Math.cos(a) * r1,
         mid + Math.sin(a) * r1,
       );
       d.stroke();
     }
+    d.fillStyle = '#120a0a';
+    d.beginPath();
+    d.arc(mid, mid, 4.5, 0, Math.PI * 2);
+    d.fill();
 
     // Hair, concentrated toward the middle (as nature intended).
     const hairs = Math.floor(c.hairiness * 500);
@@ -331,10 +341,13 @@ export class SkinPainter {
   }
 }
 
-/** Scoring tolerance in grid cells: about one design line-width of slop. */
+/**
+ * Scoring tolerance in grid cells: about 0.6 of a design line-width of slop. At a full
+ * line-width a scribbled blob near the design still read as "95% accurate".
+ */
 export function toleranceFor(job: JobSpec): number {
   const cellPx = (job.cropHalf * 2) / GRID;
-  return Math.max(1, Math.round(job.lineWidthPx / cellPx));
+  return Math.max(1, Math.round((0.6 * job.lineWidthPx) / cellPx));
 }
 
 /** Rasterize the reference design in the same canvas space as the ink, then reduce to a mask. */
