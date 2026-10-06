@@ -251,6 +251,7 @@ function showTitle(): void {
   const card = showModal(
     `<div class="logo-wrap"></div>
      <p class="tagline">A tattoo parlor for one very specific body part. Okay, two.<br/>
+       <strong class="slogan">Behind every great tattoo is a great behind.</strong><br/>
        <span class="small-print">${escapeHtml(aside('titleSmallPrint'))}</span></p>
      <ul>
        <li>Clients waddle in, drop trou, and ask for a design. Ink it <strong>exactly</strong> as shown.</li>

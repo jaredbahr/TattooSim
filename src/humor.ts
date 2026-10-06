@@ -51,8 +51,7 @@ export const HUMOR = {
   ],
   /** Title screen, small print under the tagline. */
   titleSmallPrint: [
-    'Est. 1998. Behind on everything.',
-    'Behind every great tattoo is a great behind.',
+    'Est. 1998. Under new management. Same bench.',
     'Walk-ins welcome. Waddle-ins preferred.',
     'Voted "a tattoo shop" by a local newspaper.',
     'Now hiring. Must have strong stomach and steady hands.',
@@ -62,14 +61,14 @@ export const HUMOR = {
   ],
   /** Intro card, after the time limit. */
   introAside: [
-    'They brought their own donut cushion. Optimistic.',
-    'They clenched twice in the waiting room. Unprompted.',
-    'They signed the waiver. You did not read it either.',
-    'Take a deep breath. Actually, maybe not.',
-    'Lighting is great in here. Unfortunately.',
-    'They specifically asked for "the good needle."',
-    'Their emergency contact is "no one, please."',
-    'They paid a deposit in quarters.',
+    'They tipped in advance. That is never a good sign.',
+    'They asked for "the good needle." There is one needle.',
+    'Their emergency contact is listed as "no one, please."',
+    'They paid the deposit in quarters. Warm quarters.',
+    'They googled "how long do butt tattoos take" in the waiting room.',
+    'Their friend tried to film from the doorway. Their friend has been removed.',
+    'They asked if you have done this before. You said "define before."',
+    'They signed the waiver without reading it. So did you.',
   ],
   /** Shown instead of a payment when the client stiffs you. */
   refusedToPay: [
