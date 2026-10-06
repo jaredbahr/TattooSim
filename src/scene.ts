@@ -239,6 +239,9 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
     [['NO', 'REFUNDS', 'NO', 'REGRETS'], '#1b1b1b', '#f4e04d', 4.2, 0.9, -6.44],
     [['WE DO', 'NOT DO', 'FACES'], '#e94b3c', '#fff', -5.45, 0.6, -2.5],
     [['TIP', 'YOUR', 'ARTIST'], '#3cc3e9', '#fff', 5.45, 0.6, -2.5],
+    [['EMPLOYEE', 'OF THE', 'MONTH:', 'THE MOP'], '#f2f2f2', '#1b1b1b', -2.75, -0.35, -6.44],
+    [['PLEASE', 'DO NOT', 'FART ON', 'ARTIST'], '#ff8a3c', '#1b1b1b', 2.95, -0.35, -6.44],
+    [['BATHROOM', 'IS', 'CLEAN'], '#2fd58a', '#1b1b1b', -5.45, 0.4, 2.2],
   ];
   for (const [lines, bg, fg, x, y, z] of posters) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.55), new THREE.MeshStandardMaterial({ map: poster(lines, bg, fg), roughness: 0.7 }));

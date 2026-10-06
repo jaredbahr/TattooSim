@@ -13,7 +13,7 @@ import { scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
-import { aside } from './humor';
+import { aside, nextSideGag, type SideGag } from './humor';
 
 const CLIENTS_PER_DAY = 5;
 /** Demo Day: one of each job type, gentle clients, ~3 minutes. */
@@ -77,6 +77,10 @@ const state = {
   winkTimer: 2,
   winkT: -1,
   mood: 'calm' as Mood,
+  /** Seconds left on the clock when this client's side gag fires (-1 = none). */
+  gagAt: -1,
+  /** Extra squirm from a side gag, decays to 0. */
+  squirmBoost: 0,
   walkX: -OFFSTAGE_X,
   walkTarget: -OFFSTAGE_X,
   onArrive: null as (() => void) | null,
@@ -298,7 +302,7 @@ async function arrive(): Promise<void> {
   state.pantsUp = 1;
   await walk(0);
   await wait(0.35);
-  say(`${c.name}: "${pickLine(ARRIVAL_LINES)}"`, 1400);
+  say(`${c.name}: "${aside('arrival')}"`, 1400);
   await wait(0.5);
   await tweenPose(1, 0, 0.45);
   await wait(0.35);
@@ -370,6 +374,11 @@ function startInking(): void {
   state.flinchCooldown = 0;
   state.quipTimer = 4;
   state.winkTimer = 2 + Math.random() * 2;
+  // Most clients pull one random side gag, somewhere in the middle of the job.
+  const total = state.timeLimit + c.job.timeBonus;
+  const tutorial = state.day === 1 && state.clientIndex === 0 && !state.demo;
+  state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
+  state.squirmBoost = 0;
   setZoom(c.job.zoom === 'close' ? 1 : 0);
   // Fine needle for detail work, Liner for the big pieces.
   setBrush(c.job.kind === 'hole' ? 0 : 1);
@@ -380,8 +389,35 @@ function startInking(): void {
     say('Trace the design on the card. Hold to ink. Hit Done when finished!', 4500);
     state.quipTimer = 7;
   } else {
-    say(`${c.name}: "Be gentle."`);
+    say(`${c.name}: "${aside('start')}"`);
   }
+}
+
+/** Play a side gag: its lines in sequence, then its effect on the client. */
+function playSideGag(gag: SideGag): void {
+  const c = state.customer!;
+  gag.lines.forEach((line, i) => {
+    window.setTimeout(() => {
+      if (state.phase !== 'inking' || state.customer !== c) return;
+      const isSound = line.startsWith('*') || line.startsWith('💨');
+      say(isSound ? line : `${c.name}: "${line}"`, 1500);
+      // A fart clenches on the sound itself; everything else lands on the punchline.
+      const hitAt = gag.effect === 'clench' ? 0 : gag.lines.length - 1;
+      if (i !== hitAt) return;
+      if (gag.effect === 'jolt') {
+        const dir = Math.random() * Math.PI * 2;
+        flinch.vel.set(Math.cos(dir) * 1.6, Math.sin(dir) * 1.2);
+        pointerDown = false;
+        painter.lift();
+      } else if (gag.effect === 'clench') {
+        state.clench = 1;
+        flinch.vel.y += 0.6;
+      } else if (gag.effect === 'squirm') {
+        state.squirmBoost = 0.6;
+      }
+    }, i * 1500);
+  });
+  state.quipTimer = Math.max(state.quipTimer, gag.lines.length * 1.5 + 2);
 }
 
 function payFor(score: number, c: Customer): number {
@@ -550,18 +586,6 @@ window.addEventListener('resize', onResize);
 onResize();
 
 // ---------- Per-frame simulation ----------
-const PAIN_QUIPS = [
-  ['Tickles a bit.', 'Is that it?', "This isn't so bad.", '*hums nervously*'],
-  ['Hnnngh.', 'Okay, okay, OKAY.', 'Are you using a fork?', 'Talk to me about anything else.'],
-  ['MOMMY.', 'WHY IS IT VIBRATING', "I can see colors that don't exist", 'I regret EVERYTHING'],
-];
-const FLINCH_LINES = ['OW!', 'YEOWCH!', 'SWEET MOTHER OF—', '*involuntary clench*', 'NOT THE HOLE!'];
-const ARRIVAL_LINES = ['*unbuckles*', 'Okay. Okay okay okay.', "Don't look. I mean, do. That's the job.", 'Here goes nothing.', 'Pants? Where we\'re going we don\'t need pants.'];
-function pickLine(lines: string[]): string {
-  return lines[Math.floor(Math.random() * lines.length)];
-}
-const WINK_LINES = ['*wink*', '*pucker*', 'Sorry, it does that.', "It's nervous. We're both nervous."];
-
 const tmpNormal = new THREE.Vector3();
 const toCam = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -596,7 +620,8 @@ function frame(dt: number): void {
   world.legs[1].rotation.x = -stride * 0.35;
 
   // ---- Squirm: idle sway + pain jitter + flinch spring.
-  const squirm = c ? c.squirm : 0.2;
+  state.squirmBoost = Math.max(0, state.squirmBoost - dt * 0.15);
+  const squirm = (c ? c.squirm : 0.2) + state.squirmBoost;
   // Hole work is fiddly enough already; clients hold stiller for it (tuned so a typical
   // squirm stays within about one line-width at hole scale).
   const holdStill = c?.job.kind === 'hole' ? 0.5 : 1;
@@ -623,7 +648,7 @@ function frame(dt: number): void {
     if (state.winkTimer <= 0 && state.winkT < 0) {
       state.winkT = 0;
       state.winkTimer = 2.5 + Math.random() * 3;
-      if (state.zoom > 0.5 && Math.random() < 0.35) say(WINK_LINES[Math.floor(Math.random() * WINK_LINES.length)], 1000);
+      if (state.zoom > 0.5 && Math.random() < 0.35) say(aside('wink'), 1000);
     }
   }
   let puckerGoal = 0.08 + 0.06 * Math.sin(t * 2.2); // resting "breathing"
@@ -705,20 +730,22 @@ function frame(dt: number): void {
       // dragging a streak across the design. Press again to keep going.
       pointerDown = false;
       painter.lift();
-      audio.yelp();
-      say(FLINCH_LINES[Math.floor(Math.random() * FLINCH_LINES.length)], 1200);
+      say(aside('flinch'), 1200);
     }
     setMood(moodForPain(state.pain));
 
     state.quipTimer -= dt;
     if (state.quipTimer <= 0) {
-      const tier = state.pain < 0.35 ? 0 : state.pain < 0.7 ? 1 : 2;
-      const lines = PAIN_QUIPS[tier];
-      say(`${c.name}: "${lines[Math.floor(Math.random() * lines.length)]}"`);
+      const tier = state.pain < 0.35 ? 'painLow' : state.pain < 0.7 ? 'painMid' : 'painHigh';
+      say(`${c.name}: "${aside(tier)}"`);
       state.quipTimer = 5 + Math.random() * 4;
     }
 
     state.timeLeft -= dt;
+    if (state.gagAt > 0 && state.timeLeft <= state.gagAt) {
+      state.gagAt = -1;
+      playSideGag(nextSideGag());
+    }
     const total = state.timeLimit + c.job.timeBonus;
     $('time-bar').style.width = `${Math.max(0, (state.timeLeft / total) * 100)}%`;
     $('time-text').textContent = String(Math.max(0, Math.ceil(state.timeLeft)));

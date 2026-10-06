@@ -88,22 +88,4 @@ export class GunAudio {
       osc.stop(t0 + 0.07);
     });
   }
-
-  /** Short pitched blip for UI feedback (e.g. a yelp when the customer flinches). */
-  yelp(): void {
-    if (!this.ctx || this.muted) return;
-    const ctx = this.ctx;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(520, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(980, ctx.currentTime + 0.12);
-    osc.frequency.exponentialRampToValueAtTime(340, ctx.currentTime + 0.3);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
-    osc.connect(g).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
-  }
 }

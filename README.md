@@ -138,7 +138,8 @@ Design decisions worth knowing:
 
 **Phase 3: Juice**
 - [ ] Hand-mirror reveal cinematic and reaction faces
-- [x] Retro button beeps (buzz + flinch yelp + beeps is the whole soundtrack, on purpose)
+- [x] Retro button beeps (gun buzz + beeps is the whole soundtrack, on purpose)
+- [x] Replay variety: shuffle-bag joke pools (no repeats until exhausted), random mid-tattoo side gags, more posters
 
 **Phase 4: Content**
 - [ ] Text tattoos ("MOM", "EXIT ONLY") with glyph-aware scoring

@@ -4,6 +4,7 @@
 import { designsFor, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
 import { randomLooks, type Looks, type Sex } from './portrait';
+import { ShuffleBag } from './humor';
 
 export interface Customer {
   name: string;
@@ -50,6 +51,11 @@ const OPENERS: Record<JobKind | 'any', string[]> = {
     "It's my 50th. I've earned a {d}.",
     'Saw it on TikTok. {D}. Go.',
     "My grandma had a {d} back there. Family tradition.",
+    'My therapist said to try new things. {D}.',
+    "I'm getting divorced. {D}. Make it count.",
+    "It's for a bet with my {partner}. Loser gets a {d}. I lost.",
+    'Cheaper than therapy. {D}, please.',
+    'I want to be buried with a {d}. Getting a head start.',
   ],
   hole: [
     "Right on the bullseye, chief. I want a {d}.",
@@ -57,17 +63,23 @@ const OPENERS: Record<JobKind | 'any', string[]> = {
     "I'm a private person. That's why I want a {d} in the MOST private place.",
     "Small {d}. Dead center. My doctor will know what it means.",
     "Ring of fire needs some decoration. {D}.",
+    "Put a {d} right on the bullseye. Doctor's orders. Not really.",
+    'Tiny {d}. Right on the button.',
+    'I want my proctologist to smile for once. {D}.',
   ],
   cheek: [
     "Go big. {D}. Both cheeks. Make it majestic.",
     "My ex said I'd never get a {d} on my butt. Prove {ex} wrong.",
     "I want people at the beach to SEE this {d}.",
     "Full canvas, baby. {D}. Spread it out.",
+    'Use the whole real estate. {D}.',
+    'Make it big enough to see from space. {D}.',
   ],
   moon: [
     "The whole moon, man. {D}. Cheeks AND center.",
     "I want the {d}. Don't skip the fiddly bit in the middle.",
     "Spare no expense. Spare no cheek. {D}.",
+    'Go big AND go small. {D}. You know what I mean.',
   ],
 };
 
@@ -155,38 +167,77 @@ export function makeCustomer(
   };
 }
 
+/** Mirror reactions by grade tier. Tokens: {d} design, {partner}, {ex}. */
+const REACTIONS: Record<'S' | 'A' | 'B' | 'C' | 'D' | 'F', string[]> = {
+  S: [
+    "*sobbing* It's the most beautiful {d} I've ever had back there.",
+    "I'm going to show this to EVERYONE. Mom included.",
+    "Five stars. I'd sit for you again. Well, not sit. You know.",
+    'I am going to start wearing assless chaps. For the art.',
+    'My {partner} is going to be SO confused. And proud.',
+    'This is the best thing that has ever happened to my butt. And I once sat on a heated seat in a Lexus.',
+  ],
+  A: [
+    "Oh that's a solid {d}. My butt has never looked so cultured.",
+    'Nice! A little wobbly, but so am I.',
+    "Yeah that's a {d}. I'm telling my proctologist.",
+    'Wow. I feel like a museum.',
+    'Clean lines. Unlike me.',
+    "That's going on the family Christmas card.",
+  ],
+  B: [
+    "It's... {d}-adjacent. I'll take it.",
+    'If I squint in the mirror, yeah. A {d}.',
+    "Honestly, nobody's gonna get a good look anyway.",
+    "It's got character. Like my uncle.",
+    "Good enough. I'm not paying for a second opinion.",
+    'From across the room this is fantastic.',
+  ],
+  C: [
+    'Is that a {d}? It looks like a weather map.',
+    'My {partner} says it looks like a {d} that got hit by a bus.',
+    'I asked for a {d}. This is a cry for help.',
+    'It looks like a {d} described over the phone.',
+    'I think it looks better upside down. Which is how people will see it.',
+    'Did you draw this with your other hand?',
+  ],
+  D: [
+    'What... what IS that?',
+    "I'm going to have to move to a new state.",
+    "That's not a {d}. That's a crime scene.",
+    "That's not a tattoo, that's a Rorschach test.",
+    'My dog would have done better. My dog is dead.',
+    'I see a {d}. Wait, no. A sad potato.',
+  ],
+  F: [
+    "I'm calling my lawyer. And my priest.",
+    'You drew a CRY FOR HELP on my BUTT.',
+    'There is nothing back there but regret and ink.',
+    "I'm going to need you to sign this NDA.",
+    'Is this... is this a hate crime?',
+    "My {ex} was right about me. And about you.",
+  ],
+};
+
+const reactionBags = new Map<string, ShuffleBag<string>>();
+function nextFrom(map: Map<string, ShuffleBag<string>>, key: string, pool: readonly string[]): string {
+  let bag = map.get(key);
+  if (!bag) {
+    bag = new ShuffleBag(pool);
+    map.set(key, bag);
+  }
+  return bag.next();
+}
+
+function fillTokens(t: string, c: Customer): string {
+  let out = t.replaceAll('{d}', c.design.name.toLowerCase());
+  for (const [k, v] of Object.entries(WORDS[c.sex])) out = out.replaceAll(`{${k}}`, v);
+  return out;
+}
+
 export function reactionFor(score: number, c: Customer): string {
-  const d = c.design.name.toLowerCase();
-  if (score >= 92) return pick([
-    `*sobbing* It's the most beautiful ${d} I've ever had back there.`,
-    `I'm going to show this to EVERYONE. Mom included.`,
-    `Five stars. I'd sit for you again. Well, not sit. You know.`,
-  ], Math.random);
-  if (score >= 80) return pick([
-    `Oh that's a solid ${d}. My butt has never looked so cultured.`,
-    `Nice! A little wobbly, but so am I.`,
-    `Yeah that's a ${d}. I'm telling my proctologist.`,
-  ], Math.random);
-  if (score >= 65) return pick([
-    `It's... ${d}-adjacent. I'll take it.`,
-    `If I squint in the mirror, yeah. A ${d}.`,
-    `Honestly, nobody's gonna get a good look anyway.`,
-  ], Math.random);
-  if (score >= 50) return pick([
-    `Is that a ${d}? It looks like a weather map.`,
-    `My ${WORDS[c.sex].partner} says it looks like a ${d} that got hit by a bus.`,
-    `I asked for a ${d}. This is a cry for help.`,
-  ], Math.random);
-  if (score >= 30) return pick([
-    `What... what IS that?`,
-    `I'm going to have to move to a new state.`,
-    `That's not a ${d}. That's a crime scene.`,
-  ], Math.random);
-  return pick([
-    `I'm calling my lawyer. And my priest.`,
-    `You drew a CRY FOR HELP on my BUTT.`,
-    `There is nothing back there but regret and ink.`,
-  ], Math.random);
+  const tier = score >= 92 ? 'S' : score >= 80 ? 'A' : score >= 65 ? 'B' : score >= 50 ? 'C' : score >= 30 ? 'D' : 'F';
+  return fillTokens(nextFrom(reactionBags, tier, REACTIONS[tier]), c);
 }
 
 const REVIEWS: string[][] = [
@@ -195,35 +246,50 @@ const REVIEWS: string[][] = [
     '"Ruined my life and my {d}. Bathroom was clean though."',
     '"I came in for a {d}. I left with a police sketch."',
     '"Zero stars if I could. My doctor gasped."',
+    '"The artist apologized. To my butt. Directly."',
+    '"Would not recommend. Parking was easy though."',
+    '"I have to shower in the dark now."',
   ],
   [
     '"Not great. Sitting down is now a deeply emotional experience."',
     '"The {d} is... present. That\'s all I\'ll say."',
     '"Artist seemed confused about which end was which."',
+    '"Two stars. One for the {d}, one for the free mint."',
+    '"My {partner} asked for a refund on my behalf."',
   ],
   [
     '"Decent work. Artist did not make eye contact, which I appreciated."',
     '"Solid {d}. Mostly. From a distance. In low light."',
     '"Would recommend to people I only sort of like."',
+    '"Fine. The magazines in the waiting room were from 2003."',
+    '"It\'s a {d} if you\'re generous. I am not generous. Three stars."',
   ],
   [
     '"Great vibes, steady hands. Would bend over again."',
     '"My {d} gets compliments at the gym. Wrong kind of attention, but still."',
     '"Clean lines, cold hands. Four stars."',
+    '"Lost a star because the artist hummed the Jaws theme."',
+    '"Professional, discreet, and only laughed twice."',
   ],
   [
     '"A MASTERPIECE. The Louvre should be calling. They won\'t, but they should."',
     '"I cried. The {d} cried. Perfect."',
     '"Best thing to ever happen back there. And I\'ve had a colonoscopy."',
+    '"10/10. Would moon again."',
+    '"My {ex} saw it at the beach and wept. Worth every penny."',
   ],
 ];
+
+const reviewBags = new Map<string, ShuffleBag<string>>();
 
 /** `used` collects review templates already shown, so one summary doesn't repeat a joke. */
 export function reviewFor(score: number, c: Customer, used: Set<string> = new Set()): string {
   const stars = score >= 92 ? 5 : score >= 80 ? 4 : score >= 65 ? 3 : score >= 40 ? 2 : 1;
-  const fresh = REVIEWS[stars].filter((r) => !used.has(r));
-  const template = pick(fresh.length ? fresh : REVIEWS[stars], Math.random);
+  let template = nextFrom(reviewBags, String(stars), REVIEWS[stars]);
+  // The bag already avoids repeats; this guards a reshuffle landing mid-summary.
+  for (let i = 0; used.has(template) && i < REVIEWS[stars].length; i++) {
+    template = nextFrom(reviewBags, String(stars), REVIEWS[stars]);
+  }
   used.add(template);
-  const body = template.replaceAll('{d}', c.design.name.toLowerCase());
-  return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${body}`;
+  return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${fillTokens(template, c)}`;
 }
