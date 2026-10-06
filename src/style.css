@@ -305,3 +305,5 @@ kbd {
 .board .det { color: var(--muted); font-size: 12px; }
 .board tr.mine td { background: rgba(255, 63, 164, 0.16); }
 .board .empty { text-align: center; color: var(--muted); padding: 18px; }
+
+.small-print { display: inline-block; margin-top: 4px; font-size: 12px; font-style: italic; color: var(--muted); }

@@ -17,6 +17,7 @@ import { scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
+import { aside } from './humor';
 
 const CLIENTS_PER_DAY = 5;
 /** Swap for an online implementation to make the boards global. */
@@ -251,7 +252,8 @@ function showTitle(): void {
   const best = readBest();
   const card = showModal(
     `<div class="logo-wrap"></div>
-     <p class="tagline">A tattoo parlor for one very specific body part. Okay, two.</p>
+     <p class="tagline">A tattoo parlor for one very specific body part. Okay, two.<br/>
+       <span class="small-print">${escapeHtml(aside('titleSmallPrint'))}</span></p>
      <ul>
        <li>Clients waddle in, drop trou, and ask for a design. Ink it <strong>exactly</strong> as shown.</li>
        <li><strong>Hole Jobs</strong> are close-up and the hole <em>puckers</em>. <strong>Cheek Jobs</strong> go big. <strong>Full Moon</strong> is both.</li>
@@ -343,7 +345,8 @@ function showIntro(): void {
      <div style="display:flex;gap:14px;align-items:center">
        <canvas id="intro-ref" width="200" height="200" style="width:150px;border-radius:10px;border:3px solid #fff"></canvas>
        <p style="margin:0"><strong>${escapeHtml(c.design.name)}.</strong> ${escapeHtml(c.design.tip)}<br/><br/>
-       ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus}s</strong>.</p>
+       ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus}s</strong>.
+       <span class="small-print">${escapeHtml(aside('introAside'))}</span></p>
      </div>`,
     [{ label: "Let's ink 🖊️", primary: true, onClick: startInking }],
   );
@@ -362,6 +365,7 @@ function startInking(): void {
   $('client-trait').textContent = c.trait;
   $('ref-name').textContent = `${c.design.name} · ${c.job.label}`;
   $('ref-tip').textContent = c.design.tip;
+  $('fine-print').textContent = aside('hudFinePrint');
   drawReferenceCard($<HTMLCanvasElement>('ref-card'), c, painter.outline);
 
   state.timeLimit = Math.max(28, 50 - (state.day - 1) * 5);
@@ -426,7 +430,8 @@ function finishJob(): void {
          <dt>Likeness</dt><dd>${score.score}%</dd>
          <dt>Accuracy</dt><dd>${Math.round(score.precision * 100)}% <span class="muted">of your ink was on-design</span></dd>
          <dt>Coverage</dt><dd>${Math.round(score.recall * 100)}% <span class="muted">of the design got inked</span></dd>
-         <dt>Paid</dt><dd style="color:${pay ? 'var(--green)' : 'var(--red)'}">${pay ? `$${pay}` : 'Refused to pay'}</dd>
+         <dt>Paid</dt><dd style="color:${pay ? 'var(--green)' : 'var(--red)'}">${pay ? `$${pay}` : escapeHtml(aside('refusedToPay'))}</dd>
+         <dt>Aftercare</dt><dd class="muted">${escapeHtml(aside('aftercare'))}</dd>
        </dl>
      </div>`,
     [
@@ -480,7 +485,8 @@ function endDay(): void {
        ${saveRow}
        <p style="margin-bottom:0">Your reviews:</p>
        <ul class="reviews">${reviews}</ul>
-       <p style="font-size:13px">The full game runs five clients a day, and every day they get squirmier.</p>`,
+       <p style="font-size:13px">The full game runs five clients a day, and every day they get squirmier.
+       <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
       [
         { label: 'Back to title', onClick: showTitle },
         { label: 'Play the full game', primary: true, onClick: () => startDay(1, false) },
@@ -497,7 +503,8 @@ function endDay(): void {
        ${saveRow}
        <p style="margin-bottom:0">Your online reviews:</p>
        <ul class="reviews">${reviews}</ul>
-       <p style="font-size:13px">Tomorrow's clients are more caffeinated, puckerier, and you get less time.</p>`,
+       <p style="font-size:13px">Tomorrow's clients are more caffeinated, puckerier, and you get less time.
+       <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
       [
         { label: 'Quit to title', onClick: showTitle },
         { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
@@ -565,7 +572,7 @@ async function showLeaderboard(tab: BoardId, highlightAt: string | null, onBack:
           <td class="rank">${i + 1}</td><td class="ini">${escapeHtml(r.initials)}</td>
           <td class="val">${fmt(r.value)}</td><td class="det">${escapeHtml(r.detail)}</td>
         </tr>`).join('')
-    : `<tr><td colspan="4" class="empty">Nobody yet. Be the first.</td></tr>`;
+    : `<tr><td colspan="4" class="empty">${escapeHtml(aside('emptyBoard'))}</td></tr>`;
   const tabs = (Object.keys(BOARDS) as BoardId[])
     .map((id) => `<button class="tab ${id === tab ? 'active' : ''}" data-tab="${id}">${BOARDS[id].title}</button>`)
     .join('');
