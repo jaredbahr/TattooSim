@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cheek Ink</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <!-- HUD (visible while playing) -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <span id="hud-day">Day 1</span>
+        <span id="hud-client">Client 1/5</span>
+        <span id="hud-cash">$0</span>
+      </div>
+
+      <aside id="panel">
+        <div class="client">
+          <span id="client-avatar" class="avatar">🧔</span>
+          <div>
+            <div id="client-name" class="name">Gary</div>
+            <div id="client-trait" class="trait">Ticklish</div>
+          </div>
+        </div>
+        <div class="ref-label">THE REQUEST: <strong id="ref-name">Heart</strong></div>
+        <canvas id="ref-card" width="220" height="220"></canvas>
+        <div id="ref-tip" class="tip"></div>
+
+        <div class="meter">
+          <label>Time</label>
+          <div class="bar"><div id="time-bar"></div></div>
+          <span id="time-text">45</span>
+        </div>
+        <div class="meter">
+          <label>Pain</label>
+          <div class="bar pain"><div id="pain-bar"></div></div>
+          <span id="pain-text">😐</span>
+        </div>
+
+        <div class="brushes" id="brushes"></div>
+        <button id="finish-btn" class="primary">Done inking <kbd>Space</kbd></button>
+        <div class="fine-print">No undo. Tattoos are permanent. That's the whole thing.</div>
+      </aside>
+
+      <div id="bubble" class="bubble hidden"></div>
+      <button id="mute-btn" class="ghost" title="Mute (M)">🔊</button>
+    </div>
+
+    <!-- Modal screens -->
+    <div id="modal" class="modal">
+      <div class="card" id="modal-card"></div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
