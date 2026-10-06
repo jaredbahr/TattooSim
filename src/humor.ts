@@ -1,6 +1,6 @@
 /**
- * All the jokes. House style: "Bathroom was clean though": a dry, irrelevant detail
- * delivered with a straight face after something terrible.
+ * All the jokes. House style: deadpan and butt-forward. Keep it varied: a running gag
+ * should show up once, not in every pool (the bathroom bit lives in one review only).
  *
  * Lines come out of shuffle bags: every line in a pool plays once before any repeats,
  * so people who play a lot keep seeing new stuff. Add lines freely; nothing else changes.
@@ -38,7 +38,9 @@ export const HUMOR = {
     "No undo. Tattoos are permanent. That's the whole thing.",
     'Needle sanitized. Probably.',
     'Gloves: on. Eye contact: off.',
-    'Health inspector rating: B-. Bathroom: A+.',
+    'Health inspector rating: B. As in Butt.',
+    'Pro tip: the crack is not a guideline.',
+    'We have your back. Lower.',
     'Please do not narrate what you see.',
     'Remember to breathe. Through your mouth.',
     'Our lawyer says we have to say this: no refunds.',
@@ -48,17 +50,19 @@ export const HUMOR = {
   ],
   /** Title screen, small print under the tagline. */
   titleSmallPrint: [
-    'Est. 1998. Bathroom is clean.',
+    'Est. 1998. Behind on everything.',
+    'Behind every great tattoo is a great behind.',
     'Walk-ins welcome. Waddle-ins preferred.',
     'Voted "a tattoo shop" by a local newspaper.',
     'Now hiring. Must have strong stomach and steady hands.',
     'Proudly serving the community from behind.',
-    'Ask about our loyalty card. Ten tattoos, one free mint.',
+    'Ask about our loyalty card. Ten tattoos, one free donut cushion.',
     'Formerly a Quiznos.',
   ],
   /** Intro card, after the time limit. */
   introAside: [
-    "Bathroom's down the hall if you need a minute.",
+    'Their butt has a resting worried face.',
+    'They clenched twice in the waiting room. Unprompted.',
     'They signed the waiver. You did not read it either.',
     'Take a deep breath. Actually, maybe not.',
     'Lighting is great in here. Unfortunately.',
@@ -74,6 +78,7 @@ export const HUMOR = {
     'Apply ointment twice daily. Ask a friend. Lose a friend.',
     'No swimming, no saunas, no bike seats.',
     'Moisturize. You know where.',
+    'Sit on a donut pillow. Not the tattooed kind.',
     'Wear loose pants. Or none. We are not your boss.',
     'If it itches, do NOT scratch in public.',
     'Avoid direct sunlight. Should be easy.',
@@ -81,7 +86,7 @@ export const HUMOR = {
   /** Shown instead of a payment when the client stiffs you. */
   refusedToPay: [
     'Refused to pay. Took a mint on the way out though.',
-    'Refused to pay. Left a 1-star review and a 5-star review of the bathroom.',
+    'Refused to pay. Mooned the parking lot on the way out.',
     'Refused to pay. Paid for parking though.',
     'Refused to pay. Said "thank you" really quietly.',
     'Refused to pay. Offered exposure instead.',
@@ -89,8 +94,9 @@ export const HUMOR = {
   ],
   /** End-of-day "shop notes". */
   shopNotes: [
-    'Bathroom was cleaned. Twice.',
-    'Someone left a review of the bathroom. It was positive.',
+    'Replaced the bench cushion. The old one knew too much.',
+    'Two clients compared tattoos in the lobby. Back to back. Literally.',
+    'Tried a "Bottoms Up" happy hour. Nobody understood it.',
     'Ran out of numbing cream around 2pm. Used ice and prayer.',
     'The landlord asked what we do here. We said "art."',
     'Mopped the floor. Did not ask why.',

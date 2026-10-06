@@ -65,7 +65,7 @@ const OPENERS: Record<JobKind | 'any', string[]> = {
     "Ring of fire needs some decoration. {D}.",
     "Put a {d} right on the bullseye. Doctor's orders. Not really.",
     'Tiny {d}. Right on the button.',
-    'I want my proctologist to smile for once. {D}.',
+    'Something for my spray-tan lady to look at. {D}.',
   ],
   cheek: [
     "Go big. {D}. Both cheeks. Make it majestic.",

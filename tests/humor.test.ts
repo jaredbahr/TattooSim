@@ -36,4 +36,9 @@ describe('joke pools', () => {
     const seen = new Set(Array.from({ length: n }, () => aside('shopNotes')));
     expect(seen.size).toBe(n);
   });
+
+  it('keeps running gags rare: the bathroom bit lives in one review, not the UI pools', () => {
+    const all = Object.values(HUMOR).flat().join(' ').toLowerCase();
+    expect(all).not.toContain('bathroom');
+  });
 });
