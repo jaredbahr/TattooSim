@@ -140,7 +140,7 @@ Design decisions worth knowing:
 
 **Phase 3: Juice**
 - [ ] Hand-mirror reveal cinematic and reaction faces
-- [ ] Sound pass: shop ambience, voice barks
+- [x] Retro button beeps (buzz + flinch yelp + beeps is the whole soundtrack, on purpose)
 
 **Phase 4: Content**
 - [ ] Global online leaderboard (needs a small backend, e.g. Supabase)

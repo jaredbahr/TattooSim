@@ -161,6 +161,13 @@ $('mute-btn').addEventListener('click', (e) => {
   (e.currentTarget as HTMLElement).textContent = audio.toggleMute() ? '🔇' : '🔊';
 });
 
+// Every button beeps; primary buttons get the brighter "confirm" chirp.
+document.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('button');
+  if (!btn || btn.disabled) return;
+  audio.beep(btn.classList.contains('primary') ? 'confirm' : 'select');
+});
+
 function updateTopHud(): void {
   $('hud-day').textContent = state.demo ? 'Demo Day' : `Day ${state.day}`;
   $('hud-client').textContent = `Client ${Math.min(state.clientIndex + 1, state.clientsToday)}/${state.clientsToday}`;
