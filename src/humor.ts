@@ -55,11 +55,6 @@ export const HUMOR = {
     'Mopped the floor. Did not ask why.',
     'A client left their pants. Lost & found is getting weird.',
   ],
-  /** Leaderboard with no entries. */
-  emptyBoard: [
-    'Nobody yet. The bathroom is clean though.',
-    'Empty. Like the waiting room. Like our hearts.',
-  ],
 } as const;
 
 export function aside(kind: keyof typeof HUMOR): string {

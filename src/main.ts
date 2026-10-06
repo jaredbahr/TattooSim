@@ -9,10 +9,6 @@ import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor
 import { makeCustomer, reactionFor, reviewFor, type Customer, type CustomerOptions } from './customers';
 import { makeLogo } from './logo';
 import { buildShareCard, shareCard } from './share';
-import {
-  BOARDS, LocalLeaderboard, cleanInitials, lastInitials, rememberInitials,
-  type BoardId, type Entry, type LeaderboardStore,
-} from './leaderboard';
 import { scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
@@ -20,8 +16,6 @@ import { GunAudio } from './audio';
 import { aside } from './humor';
 
 const CLIENTS_PER_DAY = 5;
-/** Swap for an online implementation to make the boards global. */
-const leaderboard: LeaderboardStore = new LocalLeaderboard();
 /** Demo Day: one of each job type, gentle clients, ~3 minutes. */
 const DEMO_SCRIPT: CustomerOptions[] = [
   { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' },
@@ -263,7 +257,6 @@ function showTitle(): void {
      </ul>
      ${best ? `<p>Best single-day earnings: <strong style="color:var(--green)">$${best}</strong></p>` : ''}`,
     [
-      { label: '🏆', onClick: () => void showLeaderboard('demo', null, showTitle) },
       { label: 'Open the shop', onClick: () => startDay(1, false) },
       { label: 'Demo Day (3 clients)', primary: true, onClick: () => startDay(1, true) },
     ],
@@ -317,7 +310,10 @@ function nextClient(): void {
   const opts = state.demo
     ? DEMO_SCRIPT[state.clientIndex]
     : state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
-  const c = makeCustomer(state.day, Math.random, state.usedDesigns, opts);
+  const c = makeCustomer(state.day, Math.random, state.usedDesigns, {
+    ...opts,
+    avoidNames: state.results.map((r) => r.customer.name),
+  });
   state.customer = c;
   state.usedDesigns.push(c.design.id);
   painter.prepare(c);
@@ -469,20 +465,12 @@ function endDay(): void {
   state.phase = 'dayEnd';
   $('hud').classList.add('hidden');
   const avg = Math.round(state.results.reduce((s, r) => s + r.score.score, 0) / state.results.length);
-  const reviews = state.results.map((r) => `<li>${escapeHtml(reviewFor(r.score.score, r.customer))}</li>`).join('');
-  const saveRow = `
-    <div class="initials-row" id="save-row">
-      <label for="initials">Your initials</label>
-      <input id="initials" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false"
-        value="${escapeHtml(lastInitials())}" placeholder="AAA" />
-      <button id="save-score" class="primary">🏆 Save score</button>
-    </div>`;
-  let card: HTMLElement;
+  const usedReviews = new Set<string>();
+  const reviews = state.results.map((r) => `<li>${escapeHtml(reviewFor(r.score.score, r.customer, usedReviews))}</li>`).join('');
   if (state.demo) {
-    card = showModal(
+    showModal(
       `<h2>Demo complete!</h2>
        <p>You earned <strong style="color:var(--green)">$${state.dayCash}</strong> · average likeness <strong>${avg}%</strong></p>
-       ${saveRow}
        <p style="margin-bottom:0">Your reviews:</p>
        <ul class="reviews">${reviews}</ul>
        <p style="font-size:13px">The full game runs five clients a day, and every day they get squirmier.
@@ -496,11 +484,10 @@ function endDay(): void {
     const best = readBest();
     const record = state.dayCash > best;
     if (record) writeBest(state.dayCash);
-    card = showModal(
+    showModal(
       `<h2>Day ${state.day} complete</h2>
        <p>Earned <strong style="color:var(--green)">$${state.dayCash}</strong> today · average likeness <strong>${avg}%</strong>
        ${record ? ' · <strong style="color:var(--yellow)">New record!</strong>' : ''}</p>
-       ${saveRow}
        <p style="margin-bottom:0">Your online reviews:</p>
        <ul class="reviews">${reviews}</ul>
        <p style="font-size:13px">Tomorrow's clients are more caffeinated, puckerier, and you get less time.
@@ -511,82 +498,6 @@ function endDay(): void {
       ],
     );
   }
-  wireScoreSaving(card, avg);
-}
-
-/** Hook up the initials box on the end-of-day card. Submits once. */
-function wireScoreSaving(card: HTMLElement, avg: number): void {
-  const input = card.querySelector<HTMLInputElement>('#initials')!;
-  const btn = card.querySelector<HTMLButtonElement>('#save-score')!;
-  input.addEventListener('input', () => {
-    input.value = input.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
-  });
-  input.addEventListener('keydown', (e) => {
-    e.stopPropagation(); // don't trigger game hotkeys while typing
-    if (e.key === 'Enter') btn.click();
-  });
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    const initials = cleanInitials(input.value);
-    rememberInitials(initials);
-    const at = new Date().toISOString();
-    const board: BoardId = state.demo ? 'demo' : 'shop';
-    const main = await leaderboard.submit(board, {
-      initials,
-      value: state.dayCash,
-      detail: state.demo ? `avg ${avg}%` : `Day ${state.day} · avg ${avg}%`,
-      at,
-    });
-    // The day's worst tattoo goes up for the Hall of Shame.
-    const worst = state.results.reduce((w, r) => (r.score.score < w.score.score ? r : w));
-    const shame = await leaderboard.submit('shame', {
-      initials,
-      value: worst.score.score,
-      detail: `${worst.customer.design.name} on ${worst.customer.name}`,
-      at,
-    });
-    const parts = [
-      main.rank >= 0 ? `<strong>#${main.rank + 1}</strong> on ${BOARDS[board].title}` : `Not top 10 on ${BOARDS[board].title} this time`,
-    ];
-    if (shame.rank >= 0) parts.push(`<strong>#${shame.rank + 1}</strong> in the Hall of Shame 💀`);
-    const row = card.querySelector('#save-row')!;
-    row.innerHTML = `<span>Saved as <strong>${initials}</strong>: ${parts.join(' · ')}</span>
-      <button id="view-board">View 🏆</button>`;
-    row.querySelector('#view-board')!.addEventListener('click', () => {
-      void showLeaderboard(board, at, () => {
-        // Back to wherever the player was headed next.
-        if (state.demo) showTitle();
-        else startDay(state.day + 1);
-      }, state.demo ? 'Back to title' : `Open Day ${state.day + 1}`);
-    });
-  });
-}
-
-/** Leaderboard screen with tabs. `highlightAt` marks the player's fresh entries. */
-async function showLeaderboard(tab: BoardId, highlightAt: string | null, onBack: () => void, backLabel = 'Back'): Promise<void> {
-  const rows = await leaderboard.top(tab);
-  const fmt = (v: number) => (BOARDS[tab].unit === '$' ? `$${v.toLocaleString()}` : `${v}%`);
-  const body = rows.length
-    ? rows.map((r: Entry, i) => `
-        <tr class="${r.at === highlightAt ? 'mine' : ''}">
-          <td class="rank">${i + 1}</td><td class="ini">${escapeHtml(r.initials)}</td>
-          <td class="val">${fmt(r.value)}</td><td class="det">${escapeHtml(r.detail)}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="4" class="empty">${escapeHtml(aside('emptyBoard'))}</td></tr>`;
-  const tabs = (Object.keys(BOARDS) as BoardId[])
-    .map((id) => `<button class="tab ${id === tab ? 'active' : ''}" data-tab="${id}">${BOARDS[id].title}</button>`)
-    .join('');
-  const card = showModal(
-    `<h2>🏆 Leaderboard</h2>
-     <div class="tabs">${tabs}</div>
-     ${tab === 'shame' ? '<p class="muted" style="margin:6px 0">The worst tattoo from each saved day. Lowest likeness wins.</p>' : ''}
-     <table class="board"><tbody>${body}</tbody></table>
-     <p class="muted" style="font-size:12px;margin-bottom:0">Scores are saved on this device.</p>`,
-    [{ label: backLabel, primary: true, onClick: onBack }],
-  );
-  card.querySelectorAll<HTMLButtonElement>('.tab').forEach((b) =>
-    b.addEventListener('click', () => void showLeaderboard(b.dataset.tab as BoardId, highlightAt, onBack, backLabel)),
-  );
 }
 
 // ---------- Input ----------

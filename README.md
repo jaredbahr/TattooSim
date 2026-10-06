@@ -18,8 +18,6 @@ lives at `https://<owner>.github.io/<repo>/`.
 - **Demo Day** (title screen, recommended for showing people): three scripted clients, one of each job type, about 3 minutes.
 - **Open the shop**: the full game. Five random clients a day, with each day squirmier and shorter on time. The very first client is always an easy one.
 
-At the end of a day, enter your initials for the **🏆 leaderboard**: Demo Day, Best Day, and the **Hall of Shame** (each day's worst tattoo; lowest likeness wins). Boards are saved on the device. `LeaderboardStore` in `src/leaderboard.ts` is the seam for a shared online backend.
-
 After any job, **📸 Share** makes a 1080×1350 result card (your work vs. the request, grade, client quote). On phones it opens the share sheet; on desktop it downloads.
 
 ## Job types
@@ -90,7 +88,7 @@ src/
   portrait.ts   procedural 32×32 pixel-art faces with live moods
   logo.ts       bitmap-font pixel logo + butt mascot
   share.ts      1080×1350 share card, Web Share API with download fallback
-  leaderboard.ts  ranked boards (pure insert/rank) behind a swappable storage interface
+  humor.ts      deadpan asides ("Bathroom was clean though") used across the UI
   scoring.ts    tolerant precision/recall scoring (pure)
   audio.ts      procedural tattoo-gun buzz + yelp (WebAudio, no assets)
 tests/
@@ -128,7 +126,7 @@ Design decisions worth knowing:
 - [x] Pixel logo title screen
 - [x] Demo Day mode and an easy first client
 - [x] Share card
-- [x] Leaderboard (on-device): Demo Day, Best Day, Hall of Shame
+- [x] Humor pass: deadpan asides on every screen
 - [x] Women clients (names, portraits, 3D hairstyles) and body-type variety for everyone
 - [x] Difficulty pass: tighter scoring, flinch interrupts instead of streaking, slower pain, hole clients hold stiller, auto needle per job
 
@@ -143,10 +141,9 @@ Design decisions worth knowing:
 - [x] Retro button beeps (buzz + flinch yelp + beeps is the whole soundtrack, on purpose)
 
 **Phase 4: Content**
-- [ ] Global online leaderboard (needs a small backend, e.g. Supabase)
 - [ ] Text tattoos ("MOM", "EXIT ONLY") with glyph-aware scoring
 - [ ] Boss clients (the Bodybuilder who clenches on a timer, the Grandma who talks the whole time)
-- [ ] Daily seeded challenge with a shared leaderboard
+- [ ] Daily seeded challenge
 
 ## Known limitations
 

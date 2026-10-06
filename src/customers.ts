@@ -111,6 +111,8 @@ export interface CustomerOptions {
   /** Force a design by id. */
   design?: string;
   sex?: Sex;
+  /** Names already used today, so a day never has two Darlenes. */
+  avoidNames?: string[];
 }
 
 /**
@@ -136,7 +138,7 @@ export function makeCustomer(
   const width = 0.92 + rand() * 0.16 + (sex === 'f' ? 0.04 : 0);
   const depth = 0.85 + rand() * 0.35 + (sex === 'f' ? 0.05 : 0);
   return {
-    name: pick(NAMES[sex], rand),
+    name: pick(NAMES[sex].filter((n) => !opts.avoidNames?.includes(n)), rand) ?? pick(NAMES[sex], rand),
     sex,
     body: { width, depth },
     looks: randomLooks(skin, sex, rand),
@@ -216,8 +218,12 @@ const REVIEWS: string[][] = [
   ],
 ];
 
-export function reviewFor(score: number, c: Customer): string {
+/** `used` collects review templates already shown, so one summary doesn't repeat a joke. */
+export function reviewFor(score: number, c: Customer, used: Set<string> = new Set()): string {
   const stars = score >= 92 ? 5 : score >= 80 ? 4 : score >= 65 ? 3 : score >= 40 ? 2 : 1;
-  const body = pick(REVIEWS[stars], Math.random).replaceAll('{d}', c.design.name.toLowerCase());
+  const fresh = REVIEWS[stars].filter((r) => !used.has(r));
+  const template = pick(fresh.length ? fresh : REVIEWS[stars], Math.random);
+  used.add(template);
+  const body = template.replaceAll('{d}', c.design.name.toLowerCase());
   return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${body}`;
 }
