@@ -1,6 +1,7 @@
 /**
  * All the jokes. House style: deadpan and butt-forward. Keep it varied: a running gag
  * should show up once, not in every pool (the bathroom bit lives in one review only).
+ * Feelings belong to people: don't give objects or body parts thoughts or emotions.
  *
  * Lines come out of shuffle bags: every line in a pool plays once before any repeats,
  * so people who play a lot keep seeing new stuff. Add lines freely; nothing else changes.
@@ -61,7 +62,7 @@ export const HUMOR = {
   ],
   /** Intro card, after the time limit. */
   introAside: [
-    'Their butt has a resting worried face.',
+    'They brought their own donut cushion. Optimistic.',
     'They clenched twice in the waiting room. Unprompted.',
     'They signed the waiver. You did not read it either.',
     'Take a deep breath. Actually, maybe not.',
@@ -69,19 +70,6 @@ export const HUMOR = {
     'They specifically asked for "the good needle."',
     'Their emergency contact is "no one, please."',
     'They paid a deposit in quarters.',
-  ],
-  /** Result card, "Aftercare" line. */
-  aftercare: [
-    'Keep it clean. Good luck with that.',
-    'Avoid sitting for 6–8 weeks.',
-    'Do not show your mother. She will ask questions.',
-    'Apply ointment twice daily. Ask a friend. Lose a friend.',
-    'No swimming, no saunas, no bike seats.',
-    'Moisturize. You know where.',
-    'Sit on a donut pillow. Not the tattooed kind.',
-    'Wear loose pants. Or none. We are not your boss.',
-    'If it itches, do NOT scratch in public.',
-    'Avoid direct sunlight. Should be easy.',
   ],
   /** Shown instead of a payment when the client stiffs you. */
   refusedToPay: [
@@ -94,7 +82,7 @@ export const HUMOR = {
   ],
   /** End-of-day "shop notes". */
   shopNotes: [
-    'Replaced the bench cushion. The old one knew too much.',
+    'Ordered donut cushions in bulk. Again.',
     'Two clients compared tattoos in the lobby. Back to back. Literally.',
     'Tried a "Bottoms Up" happy hour. Nobody understood it.',
     'Ran out of numbing cream around 2pm. Used ice and prayer.',
@@ -102,7 +90,7 @@ export const HUMOR = {
     'Mopped the floor. Did not ask why.',
     'A client left their pants. Lost & found is getting weird.',
     'Mom called. Told her we do "lower back work."',
-    'The mop got Employee of the Month again.',
+    'Ran a two-for-one cheek special. The math got weird.',
     'Neighbor complained about the screaming. Gave him a coupon.',
     'Health inspector visited. Stayed for a tattoo.',
   ],
@@ -140,8 +128,8 @@ export const HUMOR = {
   ],
   /** Hole jobs: when it winks. */
   wink: [
-    '*wink*', '*pucker*', 'Sorry, it does that.', "It's nervous. We're both nervous.",
-    'It likes you.', 'Ignore it. It wants attention.', '*blink*',
+    '*wink*', '*pucker*', 'Sorry, it does that.', "I can't control that. Medically.",
+    'Ignore that.', 'That was involuntary. Mostly.', '*blink*',
   ],
   /** Shown the first time the client is bent over and you start (not tutorial). */
   start: [
@@ -178,7 +166,7 @@ export const SIDE_GAGS: SideGag[] = [
   { lines: ['💨 *brrrap*', 'Okay that one was me.', 'Keep going. Be brave.'], effect: 'clench' },
   { lines: ['*bzzt bzzt*', "It's my mom. Should I get it?", "I'm not getting it."], effect: 'squirm' },
   { lines: ['*ringtone: Who Let The Dogs Out*', 'Hold on, I gotta— no. No. Keep going.'], effect: 'squirm' },
-  { lines: ['Are we almost done?', 'Asking for my butt.'], effect: 'none' },
+  { lines: ['Are we almost done?', "I can't feel my legs."], effect: 'none' },
   { lines: ['So... come here often?', 'Oh. Right. You work here.'], effect: 'none' },
   { lines: ['Mind if I eat? *crunch*', 'Want a Funyun?'], effect: 'none' },
   { lines: ['Is that a mirror on the ceiling?', "...why is there a mirror on the ceiling?"], effect: 'none' },

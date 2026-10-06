@@ -207,7 +207,7 @@ const REACTIONS: Record<'S' | 'A' | 'B' | 'C' | 'D' | 'F', string[]> = {
     "That's not a {d}. That's a crime scene.",
     "That's not a tattoo, that's a Rorschach test.",
     'My dog would have done better. My dog is dead.',
-    'I see a {d}. Wait, no. A sad potato.',
+    'I see a {d}. Wait, no. A potato.',
   ],
   F: [
     "I'm calling my lawyer. And my priest.",
@@ -246,7 +246,7 @@ const REVIEWS: string[][] = [
     '"Ruined my life and my {d}. Bathroom was clean though."',
     '"I came in for a {d}. I left with a police sketch."',
     '"Zero stars if I could. My doctor gasped."',
-    '"The artist apologized. To my butt. Directly."',
+    '"The artist apologized. Then apologized to my {partner}."',
     '"Would not recommend. Parking was easy though."',
     '"I have to shower in the dark now."',
   ],
@@ -273,7 +273,7 @@ const REVIEWS: string[][] = [
   ],
   [
     '"A MASTERPIECE. The Louvre should be calling. They won\'t, but they should."',
-    '"I cried. The {d} cried. Perfect."',
+    '"I cried. My {partner} cried. Perfect."',
     '"Best thing to ever happen back there. And I\'ve had a colonoscopy."',
     '"10/10. Would moon again."',
     '"My {ex} saw it at the beach and wept. Worth every penny."',

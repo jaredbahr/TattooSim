@@ -463,7 +463,6 @@ function finishJob(): void {
          <dt>Accuracy</dt><dd>${Math.round(score.precision * 100)}% <span class="muted">of your ink was on-design</span></dd>
          <dt>Coverage</dt><dd>${Math.round(score.recall * 100)}% <span class="muted">of the design got inked</span></dd>
          <dt>Paid</dt><dd style="color:${pay ? 'var(--green)' : 'var(--red)'}">${pay ? `$${pay}` : escapeHtml(aside('refusedToPay'))}</dd>
-         <dt>Aftercare</dt><dd class="muted">${escapeHtml(aside('aftercare'))}</dd>
        </dl>
      </div>`,
     [
