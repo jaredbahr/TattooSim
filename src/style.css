@@ -269,3 +269,39 @@ kbd {
   .hud-top { flex-wrap: wrap; right: 64px; }
   .hud-top span { padding: 4px 10px; font-size: 13px; }
 }
+
+/* ---------- Leaderboard ---------- */
+.initials-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.initials-row label { color: var(--muted); font-size: 13px; }
+.initials-row input {
+  width: 4.2em;
+  font: bold 22px/1 'Courier New', monospace;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--yellow);
+  background: #0e0912;
+  border: 2px solid var(--pink);
+  border-radius: 8px;
+  padding: 6px 4px;
+}
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.tabs .tab { padding: 6px 12px; font-size: 13px; }
+.tabs .tab.active { border-color: var(--pink); background: rgba(255, 63, 164, 0.18); }
+.board { width: 100%; border-collapse: collapse; font-size: 14px; }
+.board td { padding: 7px 6px; border-bottom: 1px solid var(--line); }
+.board .rank { width: 2em; color: var(--muted); text-align: right; }
+.board .ini { font: bold 16px 'Courier New', monospace; letter-spacing: 0.15em; color: var(--yellow); }
+.board .val { font-weight: bold; white-space: nowrap; }
+.board .det { color: var(--muted); font-size: 12px; }
+.board tr.mine td { background: rgba(255, 63, 164, 0.16); }
+.board .empty { text-align: center; color: var(--muted); padding: 18px; }

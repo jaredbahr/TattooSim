@@ -128,8 +128,6 @@ export interface World {
   skinMaterials: THREE.MeshStandardMaterial[];
   shirtMaterial: THREE.MeshStandardMaterial;
   hairMaterial: THREE.MeshStandardMaterial;
-  /** Hair mesh on the back of the head; hidden for bald clients. */
-  hair: THREE.Mesh;
   gun: THREE.Group;
   gunLight: THREE.PointLight;
   /** PS1 vertex-snap grid (half the low-res render size), shared by all world materials. */
@@ -141,6 +139,8 @@ export interface World {
    * `pantsUp` 1 = jeans on, 0 = bunched at the knees.
    */
   setPose(upright: number, pantsUp: number): void;
+  /** Hair meshes, shoulder width and rear proportions for this client. */
+  setLooks(looks: { sex: 'f' | 'm'; hair: string; hairColor: string }, body: { width: number; depth: number }): void;
   /** Recompute the camera's projection after the zoom or the window changes. `fov` is the landscape FOV. */
   setFov(fov: number): void;
   resize(): void;
@@ -293,7 +293,11 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   const canvasMesh = new THREE.Mesh(geo, canvasMat);
   canvasMesh.castShadow = canvasMesh.receiveShadow = true;
   canvasMesh.layers.set(HI_RES_LAYER);
-  customer.add(canvasMesh);
+  // Body shape scales the rear as a unit (skin + jeans seat). Ink and scoring live in UV
+  // space, so a wider or rounder client changes how the design sits, not how it's judged.
+  const rear = new THREE.Group();
+  customer.add(rear);
+  rear.add(canvasMesh);
 
   // Pucker: remember the rest pose of the vertices near the hole.
   const rest = Float32Array.from(pos.array as Float32Array);
@@ -348,8 +352,24 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   head.castShadow = true;
   const hairMaterial = new THREE.MeshStandardMaterial({ color: '#2b1d14', roughness: 1, flatShading: true });
   // Hair caps the back/top of the head: rel +y faces the camera when standing, rel -z is "up".
-  const hair = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 1), hairMaterial), 0, 0.68, -3.4);
-  hair.scale.set(1, 0.85, 1);
+  // Hair pieces, shown per style. Positions are in the bent pose: +y is the back of the
+  // head, -z is the crown, +z runs down the client's back.
+  const hairCap = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 1), hairMaterial), 0, 0.68, -3.4);
+  hairCap.scale.set(1, 0.85, 1);
+  const ponytail = local(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.1, 1.7, 6), hairMaterial), 0, 1.2, -2.6);
+  ponytail.rotation.x = Math.PI / 2 - 0.15;
+  // Long hair and pigtails sit proud of the torso's back face so they show when standing.
+  const longHair = local(new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.22, 1.5), hairMaterial), 0, 1.38, -2.75);
+  const bun = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), hairMaterial), 0, 0.6, -3.95);
+  const pigtails = [-1, 1].map((side) => {
+    // Cylinder +y maps to "down" when standing, so the thin end is the tip.
+    const p = local(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.16, 1.0, 6), hairMaterial), side * 0.62, 1.35, -2.65);
+    p.rotation.x = Math.PI / 2 - 0.3;
+    p.rotation.z = -side * 0.35;
+    return p;
+  });
+  const afro = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 1), hairMaterial), 0, 0.62, -3.45);
+  for (const m of [hairCap, ponytail, longHair, bun, ...pigtails, afro]) m.castShadow = true;
   // Arms hang from the shoulders; their pivots counter-rotate so they always dangle downward.
   const armPivots: THREE.Group[] = [];
   for (const side of [-1, 1]) {
@@ -407,7 +427,7 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   seat.scale.set(1.02, 1.02, 1.06);
   seat.position.z = 0.02;
   seat.layers.set(HI_RES_LAYER);
-  customer.add(seat);
+  rear.add(seat);
 
   // Legs on hip pivots (so they can swing), jeans bunched at the knees.
   const denim = new THREE.MeshStandardMaterial({ color: '#2f4a73', roughness: 0.95, flatShading: true });
@@ -452,6 +472,21 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
 
   const denimColor = new THREE.Color('#2f4a73');
   const skinColor = new THREE.Color();
+  function setLooks(looks: { sex: 'f' | 'm'; hair: string; hairColor: string }, body: { width: number; depth: number }): void {
+    hairMaterial.color.set(looks.hairColor);
+    const h = looks.hair;
+    hairCap.visible = h !== 'bald' && h !== 'afro';
+    afro.visible = h === 'afro';
+    ponytail.visible = h === 'ponytail';
+    longHair.visible = h === 'long' || h === 'bob' || h === 'mullet';
+    longHair.scale.z = h === 'bob' ? 0.45 : 1;
+    longHair.position.z = (h === 'bob' ? -3.05 : -2.75) - upper.position.z;
+    bun.visible = h === 'bun';
+    for (const p of pigtails) p.visible = h === 'pigtails';
+    shoulders.scale.x = looks.sex === 'f' ? 0.86 : 1;
+    rear.scale.set(body.width, 1, body.depth);
+  }
+
   function setPose(upright: number, pantsUp: number): void {
     upper.rotation.x = upright * (Math.PI / 2);
     for (const a of armPivots) a.rotation.x = -upper.rotation.x;
@@ -523,7 +558,7 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
 
   return {
     renderer, scene, camera, customer, legs, canvasMesh,
-    skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial, hair, gun, gunLight, snapRes,
-    setPucker, setPose, setFov, resize,
+    skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial, gun, gunLight, snapRes,
+    setPucker, setPose, setLooks, setFov, resize,
   };
 }

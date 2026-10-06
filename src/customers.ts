@@ -3,10 +3,13 @@
  */
 import { designsFor, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
-import { randomLooks, type Looks } from './portrait';
+import { randomLooks, type Looks, type Sex } from './portrait';
 
 export interface Customer {
   name: string;
+  sex: Sex;
+  /** Rear proportions: width and depth multipliers around 1. */
+  body: { width: number; depth: number };
   looks: Looks;
   job: JobSpec;
   design: Design;
@@ -27,18 +30,22 @@ export interface Customer {
   trait: string;
 }
 
-const NAMES = [
-  'Gary', 'Brenda', 'Big Steve', 'Tammy', 'Doug', 'Kyle', 'Linda', 'Chad',
-  'Deb', 'Randy', 'Crystal', 'Earl', 'Marge', 'Todd', 'Becky', 'Vince',
-  'Pam', 'Duane', 'Sheila', 'Lance', 'Gloria', 'Rusty', 'Darlene', 'Moose',
-];
+const NAMES: Record<Sex, string[]> = {
+  m: ['Gary', 'Big Steve', 'Doug', 'Kyle', 'Chad', 'Randy', 'Earl', 'Todd', 'Vince', 'Duane', 'Lance', 'Rusty', 'Moose', 'Dale'],
+  f: ['Brenda', 'Tammy', 'Linda', 'Deb', 'Crystal', 'Marge', 'Becky', 'Pam', 'Sheila', 'Gloria', 'Darlene', 'Rhonda', 'Trish', 'Jolene', 'Bev', 'Doreen'],
+};
+/** Words that change with the client: {ex} = their ex, {partner}, {party}. */
+const WORDS: Record<Sex, Record<string, string>> = {
+  m: { ex: 'her', partner: 'wife', party: 'Bachelor party' },
+  f: { ex: 'him', partner: 'husband', party: 'Bachelorette party' },
+};
 
 const SKINS = ['#f5d0b5', '#eabf9f', '#d9a27e', '#c68a62', '#a86f4c', '#8a5537', '#6b3f28', '#f2c4c4'];
 
 const OPENERS: Record<JobKind | 'any', string[]> = {
   any: [
     'Lost a bet. Make it a {d}.',
-    'Bachelor party. Do not ask. Just a {d}.',
+    '{party}. Do not ask. Just a {d}.',
     "Fortune cookie said 'great things come from behind.' {D}, please.",
     "It's my 50th. I've earned a {d}.",
     'Saw it on TikTok. {D}. Go.',
@@ -53,7 +60,7 @@ const OPENERS: Record<JobKind | 'any', string[]> = {
   ],
   cheek: [
     "Go big. {D}. Both cheeks. Make it majestic.",
-    "My ex said I'd never get a {d} on my butt. Prove her wrong.",
+    "My ex said I'd never get a {d} on my butt. Prove {ex} wrong.",
     "I want people at the beach to SEE this {d}.",
     "Full canvas, baby. {D}. Spread it out.",
   ],
@@ -80,10 +87,12 @@ function pick<T>(arr: readonly T[], rand: () => number): T {
   return arr[Math.floor(rand() * arr.length)];
 }
 
-function fillTemplate(t: string, design: Design): string {
+function fillTemplate(t: string, design: Design, sex: Sex): string {
   const lower = design.name.toLowerCase();
   const upper = design.name.charAt(0).toUpperCase() + design.name.slice(1);
-  return t.replaceAll('{d}', lower).replaceAll('{D}', upper);
+  let out = t.replaceAll('{d}', lower).replaceAll('{D}', upper);
+  for (const [k, v] of Object.entries(WORDS[sex])) out = out.replaceAll(`{${k}}`, v);
+  return out;
 }
 
 /** Full Moon jobs get more common as the days go on. */
@@ -101,6 +110,7 @@ export interface CustomerOptions {
   trait?: string;
   /** Force a design by id. */
   design?: string;
+  sex?: Sex;
 }
 
 /**
@@ -121,14 +131,20 @@ export function makeCustomer(
   const skin = pick(SKINS, rand);
   const dayPressure = Math.min(0.35, (day - 1) * 0.07);
   const openers = rand() < 0.6 ? OPENERS[kind] : OPENERS.any;
+  const sex: Sex = opts.sex ?? (rand() < 0.5 ? 'f' : 'm');
+  // Rears come in all shapes. Women skew a little wider and rounder on average.
+  const width = 0.92 + rand() * 0.16 + (sex === 'f' ? 0.04 : 0);
+  const depth = 0.85 + rand() * 0.35 + (sex === 'f' ? 0.05 : 0);
   return {
-    name: pick(NAMES, rand),
-    looks: randomLooks(skin, rand),
+    name: pick(NAMES[sex], rand),
+    sex,
+    body: { width, depth },
+    looks: randomLooks(skin, sex, rand),
     job: JOBS[kind],
     design,
-    request: fillTemplate(pick(openers, rand), design),
+    request: fillTemplate(pick(openers, rand), design, sex),
     skin,
-    hairiness: trait.hair,
+    hairiness: sex === 'f' ? trait.hair * 0.4 : trait.hair,
     squirm: Math.min(1, trait.squirm + dayPressure),
     sensitivity: trait.sensitivity,
     puckeriness: Math.min(1, trait.pucker + dayPressure * 0.5),
@@ -156,7 +172,7 @@ export function reactionFor(score: number, c: Customer): string {
   ], Math.random);
   if (score >= 50) return pick([
     `Is that a ${d}? It looks like a weather map.`,
-    `My wife says it looks like a ${d} that got hit by a bus.`,
+    `My ${WORDS[c.sex].partner} says it looks like a ${d} that got hit by a bus.`,
     `I asked for a ${d}. This is a cry for help.`,
   ], Math.random);
   if (score >= 30) return pick([
@@ -171,15 +187,37 @@ export function reactionFor(score: number, c: Customer): string {
   ], Math.random);
 }
 
+const REVIEWS: string[][] = [
+  [],
+  [
+    '"Ruined my life and my {d}. Bathroom was clean though."',
+    '"I came in for a {d}. I left with a police sketch."',
+    '"Zero stars if I could. My doctor gasped."',
+  ],
+  [
+    '"Not great. Sitting down is now a deeply emotional experience."',
+    '"The {d} is... present. That\'s all I\'ll say."',
+    '"Artist seemed confused about which end was which."',
+  ],
+  [
+    '"Decent work. Artist did not make eye contact, which I appreciated."',
+    '"Solid {d}. Mostly. From a distance. In low light."',
+    '"Would recommend to people I only sort of like."',
+  ],
+  [
+    '"Great vibes, steady hands. Would bend over again."',
+    '"My {d} gets compliments at the gym. Wrong kind of attention, but still."',
+    '"Clean lines, cold hands. Four stars."',
+  ],
+  [
+    '"A MASTERPIECE. The Louvre should be calling. They won\'t, but they should."',
+    '"I cried. The {d} cried. Perfect."',
+    '"Best thing to ever happen back there. And I\'ve had a colonoscopy."',
+  ],
+];
+
 export function reviewFor(score: number, c: Customer): string {
   const stars = score >= 92 ? 5 : score >= 80 ? 4 : score >= 65 ? 3 : score >= 40 ? 2 : 1;
-  const body = [
-    '',
-    `"Ruined my life and my ${c.design.name.toLowerCase()}. Bathroom was clean though."`,
-    `"Not great. Sitting down is now a deeply emotional experience."`,
-    `"Decent work. Artist did not make eye contact, which I appreciated."`,
-    `"Great vibes, steady hands. Would bend over again."`,
-    `"A MASTERPIECE. The Louvre should be calling. They won't, but they should."`,
-  ][stars];
+  const body = pick(REVIEWS[stars], Math.random).replaceAll('{d}', c.design.name.toLowerCase());
   return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${body}`;
 }
