@@ -66,16 +66,21 @@ export function gradeFor(score: number): Grade {
   return 'F';
 }
 
+/**
+ * @param strayInk ink area (in grid cells) that fell outside the scored crop entirely.
+ *   It can never hit the design, so it only drags precision down.
+ */
 export function scoreMasks(
   ink: Uint8Array,
   target: Uint8Array,
   size: number,
   tolerance = 2,
+  strayInk = 0,
 ): ScoreBreakdown {
   if (ink.length !== size * size || target.length !== size * size) {
     throw new Error(`mask length must be size*size (${size * size})`);
   }
-  const inkCount = countOn(ink);
+  const inkCount = countOn(ink) + strayInk;
   const targetCount = countOn(target);
   if (inkCount === 0 || targetCount === 0) {
     return { precision: 0, recall: 0, score: 0, grade: 'F' };

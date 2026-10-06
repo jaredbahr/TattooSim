@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dilate, gradeFor, scoreMasks } from '../src/scoring';
+import { countOn, dilate, gradeFor, scoreMasks } from '../src/scoring';
 
 const SIZE = 64;
 
@@ -79,6 +79,16 @@ describe('scoreMasks', () => {
   it('scores the wrong shape poorly', () => {
     const r = scoreMasks(ring(8), ring(25), SIZE);
     expect(r.score).toBeLessThan(15);
+  });
+
+  it('counts ink outside the crop against accuracy', () => {
+    const t = ring(20);
+    const clean = scoreMasks(t.slice(), t, SIZE);
+    const messy = scoreMasks(t.slice(), t, SIZE, 2, countOn(t));
+    expect(clean.precision).toBe(1);
+    expect(messy.precision).toBeCloseTo(0.5, 5);
+    expect(messy.recall).toBe(1);
+    expect(messy.score).toBeLessThan(clean.score);
   });
 
   it('rejects mismatched sizes', () => {

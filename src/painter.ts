@@ -7,17 +7,23 @@
  *   ink   - what the player actually drew (the only layer that gets scored)
  *
  * Everything lives in UV space: canvas (0,0) is the top-left of the mesh's UV square,
- * and the design is centered on (0.5, 0.5).
+ * and the hole (and every design) is centered on (0.5, 0.5).
+ *
+ * Art direction: the skin layer is pixelated to SKIN_PIXELS to match the low-res world,
+ * but the ink is kept at full resolution so linework stays readable.
  */
 import * as THREE from 'three';
-import { renderDesign, type Design } from './designs';
+import { renderDesign } from './designs';
 import type { Customer } from './customers';
+import type { JobSpec } from './jobs';
 
 export const TEX_SIZE = 1024;
-/** Half-size of the design area in canvas px (design spans 40% of the UV square). */
-export const DESIGN_HALF = TEX_SIZE * 0.2;
-/** Scoring grid resolution covering the whole canvas (8 px per cell). */
+/** Scoring grid resolution covering the job's crop square. */
 export const GRID = 128;
+/** The skin is drawn smooth, then crunched to this resolution for the PS1 pixel look. Ink stays full-res. */
+const SKIN_PIXELS = 160;
+/** Finer pixel grid for the hole and hair. */
+const DETAIL_PIXELS = 384;
 
 export const BRUSHES = [
   { label: 'Fine', radius: 4 },
@@ -57,6 +63,16 @@ function makeCanvas(size = TEX_SIZE): [HTMLCanvasElement, CanvasRenderingContext
   return [c, ctx];
 }
 
+/** Downsample a TEX_SIZE canvas to `pixels` and blow it back up with hard edges. */
+function pixelateInPlace(ctx: CanvasRenderingContext2D, pixels: number): void {
+  const [, small] = makeCanvas(pixels);
+  small.drawImage(ctx.canvas, 0, 0, pixels, pixels);
+  ctx.clearRect(0, 0, TEX_SIZE, TEX_SIZE);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small.canvas, 0, 0, TEX_SIZE, TEX_SIZE);
+  ctx.imageSmoothingEnabled = true;
+}
+
 function shade(hex: string, amount: number): string {
   const c = new THREE.Color(hex);
   if (amount < 0) c.lerp(new THREE.Color('#3a1a1a'), -amount);
@@ -70,6 +86,7 @@ export class SkinPainter {
   private readonly base: CanvasRenderingContext2D;
   private readonly irritation: CanvasRenderingContext2D;
   private readonly ink: CanvasRenderingContext2D;
+  private readonly detail: CanvasRenderingContext2D;
   private readonly silhouette = silhouettePath();
   /** Opaque everywhere except the silhouette; used to cast the rim shadow. */
   private readonly outside: HTMLCanvasElement;
@@ -84,6 +101,7 @@ export class SkinPainter {
     this.base = makeCanvas()[1];
     this.irritation = makeCanvas()[1];
     this.ink = makeCanvas()[1];
+    this.detail = makeCanvas()[1];
     const [outside, o] = makeCanvas();
     o.fillStyle = '#000';
     o.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
@@ -134,49 +152,6 @@ export class SkinPainter {
     b.fillStyle = crease;
     b.fillRect(mid - 40, S * 0.12, 80, S * 0.88);
 
-    // The landmark. Cartoon-style: a dusky spot with radiating wrinkles.
-    const spot = b.createRadialGradient(mid, mid, 0, mid, mid, 46);
-    spot.addColorStop(0, shade(c.skin, -0.75));
-    spot.addColorStop(0.35, shade(c.skin, -0.45));
-    spot.addColorStop(1, shade(c.skin, -0.2) + '00');
-    b.fillStyle = spot;
-    b.beginPath();
-    b.arc(mid, mid, 46, 0, Math.PI * 2);
-    b.fill();
-    b.strokeStyle = shade(c.skin, -0.6);
-    b.lineCap = 'round';
-    b.lineWidth = 2.5;
-    for (let i = 0; i < 11; i++) {
-      const a = (i / 11) * Math.PI * 2 + Math.random() * 0.2;
-      const r0 = 7;
-      const r1 = 22 + Math.random() * 12;
-      b.beginPath();
-      b.moveTo(mid + Math.cos(a) * r0, mid + Math.sin(a) * r0);
-      b.quadraticCurveTo(
-        mid + Math.cos(a + 0.15) * (r0 + r1) * 0.5,
-        mid + Math.sin(a + 0.15) * (r0 + r1) * 0.5,
-        mid + Math.cos(a) * r1,
-        mid + Math.sin(a) * r1,
-      );
-      b.stroke();
-    }
-
-    // Hair, concentrated toward the middle (as nature intended).
-    const hairs = Math.floor(c.hairiness * 900);
-    b.strokeStyle = '#2b1d14cc';
-    b.lineWidth = 1.6;
-    for (let i = 0; i < hairs; i++) {
-      const spread = 80 + Math.random() * 300;
-      const x = mid + (Math.random() - 0.5) * spread * 1.2;
-      const y = mid + (Math.random() - 0.5) * spread * 2;
-      const a = Math.random() * Math.PI * 2;
-      const len = 6 + Math.random() * 12;
-      b.beginPath();
-      b.moveTo(x, y);
-      b.quadraticCurveTo(x + Math.cos(a + 0.8) * len * 0.6, y + Math.sin(a + 0.8) * len * 0.6, x + Math.cos(a) * len, y + Math.sin(a) * len);
-      b.stroke();
-    }
-
     // Darken the rim so the cut-out edge reads as skin curving away, not a paper edge.
     // Inner-shadow trick: draw everything *outside* the silhouette (clipped away) and let
     // only its blurred shadow bleed inward. Stroking the path would also stroke the
@@ -184,6 +159,62 @@ export class SkinPainter {
     b.shadowColor = shade(c.skin, -0.4) + 'aa';
     b.shadowBlur = 40;
     b.drawImage(this.outside, 0, 0);
+    b.restore();
+
+    // Crunch to chunky pixels.
+    pixelateInPlace(b, SKIN_PIXELS);
+
+    // Detail layer (the hole and the hair) gets a finer pixel grid so it still reads
+    // in the close-up: it's the star of the show.
+    const d = this.detail;
+    d.clearRect(0, 0, S, S);
+    // The landmark. Cartoon-style: a dusky spot with radiating wrinkles.
+    const spot = d.createRadialGradient(mid, mid, 0, mid, mid, 28);
+    spot.addColorStop(0, shade(c.skin, -0.75));
+    spot.addColorStop(0.35, shade(c.skin, -0.45));
+    spot.addColorStop(1, shade(c.skin, -0.2) + '00');
+    d.fillStyle = spot;
+    d.beginPath();
+    d.arc(mid, mid, 28, 0, Math.PI * 2);
+    d.fill();
+    d.strokeStyle = shade(c.skin, -0.6);
+    d.lineCap = 'round';
+    d.lineWidth = 3;
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2 + Math.random() * 0.2;
+      const r0 = 4;
+      const r1 = 13 + Math.random() * 7;
+      d.beginPath();
+      d.moveTo(mid + Math.cos(a) * r0, mid + Math.sin(a) * r0);
+      d.quadraticCurveTo(
+        mid + Math.cos(a + 0.15) * (r0 + r1) * 0.5,
+        mid + Math.sin(a + 0.15) * (r0 + r1) * 0.5,
+        mid + Math.cos(a) * r1,
+        mid + Math.sin(a) * r1,
+      );
+      d.stroke();
+    }
+
+    // Hair, concentrated toward the middle (as nature intended).
+    const hairs = Math.floor(c.hairiness * 500);
+    d.strokeStyle = '#2b1d14cc';
+    d.lineWidth = 2.6;
+    for (let i = 0; i < hairs; i++) {
+      const spread = 80 + Math.random() * 300;
+      const x = mid + (Math.random() - 0.5) * spread * 1.2;
+      const y = mid + (Math.random() - 0.5) * spread * 2;
+      const a = Math.random() * Math.PI * 2;
+      const len = 6 + Math.random() * 12;
+      d.beginPath();
+      d.moveTo(x, y);
+      d.quadraticCurveTo(x + Math.cos(a + 0.8) * len * 0.6, y + Math.sin(a + 0.8) * len * 0.6, x + Math.cos(a) * len, y + Math.sin(a) * len);
+      d.stroke();
+    }
+
+    pixelateInPlace(d, DETAIL_PIXELS);
+    b.save();
+    b.clip(this.silhouette);
+    b.drawImage(d.canvas, 0, 0);
     b.restore();
 
     this.irritation.clearRect(0, 0, S, S);
@@ -256,63 +287,116 @@ export class SkinPainter {
     this.dirty = false;
   }
 
-  /** Downsample the ink layer into a binary GRID x GRID mask. */
-  inkMask(): Uint8Array {
-    return toMask(this.ink.canvas);
+  /**
+   * The player's ink as a GRID×GRID mask over the job's crop square, plus how much ink
+   * (in grid cells) landed outside the crop where it can only count against them.
+   */
+  inkMask(job: JobSpec): { mask: Uint8Array; stray: number } {
+    const mask = toMask(this.ink.canvas, job.cropHalf);
+    // Stray ink: sample the whole canvas coarsely and count samples outside the crop.
+    const N = 256;
+    const step = TEX_SIZE / N;
+    const [, small] = makeCanvas(N);
+    small.drawImage(this.ink.canvas, 0, 0, N, N);
+    const data = small.getImageData(0, 0, N, N).data;
+    const lo = TEX_SIZE / 2 - job.cropHalf;
+    const hi = TEX_SIZE / 2 + job.cropHalf;
+    let strayPx = 0;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (data[(y * N + x) * 4 + 3] <= 50) continue;
+        const cx = (x + 0.5) * step;
+        const cy = (y + 0.5) * step;
+        if (cx < lo || cx > hi || cy < lo || cy > hi) strayPx += step * step;
+      }
+    }
+    const cellPx = (job.cropHalf * 2) / GRID;
+    return { mask, stray: strayPx / (cellPx * cellPx) };
   }
 
-  /** Square crop of the composite around the design area, for the results screen. */
-  snapshot(size = 260): HTMLCanvasElement {
+  /** Square crop of the composite around the job's area, for the results screen. */
+  snapshot(job: JobSpec, size = 260): HTMLCanvasElement {
     this.flush();
     const [out, ctx] = makeCanvas(size);
-    const crop = DESIGN_HALF * 1.35;
-    ctx.drawImage(this.composite.canvas, TEX_SIZE / 2 - crop, TEX_SIZE / 2 - crop, crop * 2, crop * 2, 0, 0, size, size);
+    ctx.fillStyle = '#1c1424';
+    ctx.fillRect(0, 0, size, size);
+    const c = job.cropHalf;
+    ctx.drawImage(this.composite.canvas, TEX_SIZE / 2 - c, TEX_SIZE / 2 - c, c * 2, c * 2, 0, 0, size, size);
     return out;
   }
+
+  /** Same outline the mesh is cut to, for drawing guides. */
+  get outline(): Path2D {
+    return this.silhouette;
+  }
+}
+
+/** Scoring tolerance in grid cells: about one design line-width of slop. */
+export function toleranceFor(job: JobSpec): number {
+  const cellPx = (job.cropHalf * 2) / GRID;
+  return Math.max(1, Math.round(job.lineWidthPx / cellPx));
 }
 
 /** Rasterize the reference design in the same canvas space as the ink, then reduce to a mask. */
-export function targetMask(design: Design): Uint8Array {
-  const [c, ctx] = makeCanvas();
+export function targetMask(c: Customer): Uint8Array {
+  const [canvas, ctx] = makeCanvas();
   ctx.strokeStyle = '#000';
-  renderDesign(ctx, design, TEX_SIZE / 2, TEX_SIZE / 2, DESIGN_HALF);
-  return toMask(c);
+  renderDesign(ctx, c.design, TEX_SIZE / 2, TEX_SIZE / 2, c.job.half, c.job.lineWidthPx);
+  return toMask(canvas, c.job.cropHalf);
 }
 
-function toMask(src: HTMLCanvasElement): Uint8Array {
+function toMask(src: HTMLCanvasElement, cropHalf: number): Uint8Array {
   const [, small] = makeCanvas(GRID);
   small.imageSmoothingEnabled = true;
   small.imageSmoothingQuality = 'high';
-  small.drawImage(src, 0, 0, GRID, GRID);
+  const o = TEX_SIZE / 2 - cropHalf;
+  small.drawImage(src, o, o, cropHalf * 2, cropHalf * 2, 0, 0, GRID, GRID);
   const data = small.getImageData(0, 0, GRID, GRID).data;
   const mask = new Uint8Array(GRID * GRID);
   for (let i = 0; i < mask.length; i++) mask[i] = data[i * 4 + 3] > 50 ? 1 : 0;
   return mask;
 }
 
-/** Reference card: design drawn over a little cartoon of the canvas so the player knows where it goes. */
-export function drawReferenceCard(canvas: HTMLCanvasElement, design: Design, overlayOn?: HTMLCanvasElement): void {
+/**
+ * Reference card: the design over a little diagram of the job area (silhouette, crease,
+ * hole) so the player knows where it goes. With `overlayOn`, draws the design in green
+ * over the player's actual result instead.
+ */
+export function drawReferenceCard(
+  canvas: HTMLCanvasElement,
+  c: Customer,
+  outline: Path2D,
+  overlayOn?: HTMLCanvasElement,
+): void {
   const ctx = canvas.getContext('2d')!;
   const S = canvas.width;
+  const k = S / (c.job.cropHalf * 2);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, S, S);
   if (overlayOn) {
     ctx.drawImage(overlayOn, 0, 0, S, S);
   } else {
-    ctx.fillStyle = '#f6efe4';
+    ctx.fillStyle = '#3a2c40';
     ctx.fillRect(0, 0, S, S);
-    // Faint guide: crease + center dot.
+  }
+  // Map skin-canvas px to card px.
+  ctx.setTransform(k, 0, 0, k, S / 2 - (TEX_SIZE / 2) * k, S / 2 - (TEX_SIZE / 2) * k);
+  if (!overlayOn) {
+    ctx.fillStyle = '#f6efe4';
+    ctx.fill(outline);
     ctx.strokeStyle = '#d9c9b4';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 / k;
     ctx.beginPath();
-    ctx.moveTo(S / 2, 0);
-    ctx.lineTo(S / 2, S);
+    ctx.moveTo(TEX_SIZE / 2, 150);
+    ctx.lineTo(TEX_SIZE / 2, 760);
     ctx.stroke();
     ctx.fillStyle = '#b48d78';
     ctx.beginPath();
-    ctx.arc(S / 2, S / 2, S * 0.025, 0, Math.PI * 2);
+    ctx.arc(TEX_SIZE / 2, TEX_SIZE / 2, Math.max(10, 3 / k), 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.strokeStyle = overlayOn ? 'rgba(0, 220, 140, 0.85)' : '#1b1d2c';
-  // Same framing as SkinPainter.snapshot: the design half-size is 1/1.35 of the crop half-size.
-  renderDesign(ctx, design, S / 2, S / 2, S / 2 / 1.35);
+  const fill = overlayOn ? 'rgba(0, 220, 140, 0.45)' : '#1b1d2c';
+  renderDesign(ctx, c.design, TEX_SIZE / 2, TEX_SIZE / 2, c.job.half, c.job.lineWidthPx, fill);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }

@@ -1,8 +1,8 @@
 {
-  "name": "cheek-ink",
+  "name": "cheeky-business",
   "private": true,
   "version": "0.1.0",
-  "description": "Cheek Ink: a 3D tattoo parlor sim where every client wants the same body part inked.",
+  "description": "Cheeky Business: a PS1-style tattoo parlor sim for butts and buttholes.",
   "type": "module",
   "scripts": {
     "dev": "vite",

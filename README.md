@@ -1,10 +1,25 @@
-# Cheek Ink
+# Cheeky Business
 
-A 3D tattoo-parlor sim for one very specific clientele. Customers walk in, bend over,
-and ask for a tattoo *right there*. You ink it freehand while they squirm, and you're
+A PS1-style 3D tattoo-parlor sim for one very specific body part. Okay, two.
+Clients waddle in with their pants around their knees, bend over, and ask for a tattoo
+on the butt, on the butthole, or both. You ink it freehand while they squirm, and you're
 judged on how much your work actually looks like what they asked for.
 
 Built with **Three.js + TypeScript + Vite**. Runs in any modern browser, desktop or mobile.
+
+## Play it from GitHub
+
+`.github/workflows/deploy.yml` builds and publishes the game to GitHub Pages on every push
+to `main`. One-time setup: **Settings → Pages → Source: GitHub Actions**. The game then
+lives at `https://<owner>.github.io/<repo>/`.
+
+## Job types
+
+| Job | Camera | Designs | Twist |
+|---|---|---|---|
+| **Hole Job** | Close-up | Small, built around the hole: Bird's-Eye View, Tribal Sun, Smooch, Bullseye, Donut… | The hole **puckers and winks**, dragging your linework with it |
+| **Cheek Job** | Wide | Big pieces: Bald Eagle, Sailor Swallows, Tribal Tramp Stamp, Angel Wings, Big Heart | Coverage, filled tribal, squirming |
+| **Full Moon** | Wide, zoom for detail | Phoenix Rising, Eye of the Tribe, Full Moon | Both at once. Pays 1.7× |
 
 ## Run it
 
@@ -21,11 +36,13 @@ npm run build      # typecheck + production build to dist/
 |---|---|
 | Hold left mouse / finger | Ink |
 | `1` `2` `3` | Fine / Liner / Shader needle |
+| `Z` or scroll wheel | Zoom in / out |
 | `Space` or `Enter` | Done inking |
 | `M` | Mute the gun buzz |
 
-- Each day has **5 clients**. Each one wants a design from the library (heart, star, bullseye, black-hole spiral, and so on).
-- **They squirm.** Every client has a trait (Ticklish, Too much coffee, Ex-Marine...) that sets their wiggle, pain sensitivity and tipping.
+- Each day has **5 clients**. Each one wants a Hole Job, a Cheek Job, or (more often on later days) a Full Moon.
+- **They squirm.** Every client has a trait (Ticklish, Nervous winker, Too much coffee, Ex-Marine...) that sets their wiggle, pucker rate, pain sensitivity and tipping.
+- **Watch their face.** The pixel portrait sweats, winces and cries as pain builds.
 - **Pain builds while you ink**, and faster near the... center. Max it out and they flinch hard. Ease off to let it fade.
 - **No undo.** Tattoos are permanent. That's the whole thing.
 - Later days give you less time and more caffeinated clients.
@@ -34,21 +51,24 @@ npm run build      # typecheck + production build to dist/
 
 `src/scoring.ts` is pure, DOM-free and unit-tested.
 
-1. The reference design is rasterized into the same UV canvas space the player paints in.
-2. Ink and design are both reduced to 128×128 binary masks.
-3. **Accuracy (precision)**: how much of your ink lands within 2 cells (~16 px of 1024) of the design. This catches scribbling and flooding.
-4. **Coverage (recall)**: how much of the design has ink within 2 cells. This catches half-finished work.
+1. The reference design is rasterized into the same UV canvas space the player paints in, at the job's scale.
+2. Ink and design are both reduced to 128×128 binary masks over the job's crop square (tight for Hole Jobs, wide for Cheek/Full Moon). Ink outside the crop counts as stray.
+3. **Accuracy (precision)**: how much of your ink lands within about one line-width of the design. This catches scribbling and flooding.
+4. **Coverage (recall)**: how much of the design has ink within that tolerance. This catches half-finished work.
 5. **Likeness** = F1 of the two, curved slightly downward (`f1^1.2`). Grades run S / A / B / C / D / F. Under 30% means the client refuses to pay.
 
 ## Architecture
 
 ```
 src/
-  main.ts       game state machine (title → intro → inking → result → dayEnd), input, per-frame sim
-  scene.ts      parlor, customer rig (heightfield rear + body), tattoo gun, lighting, camera
-  painter.ts    layered skin canvas (base / irritation / ink), silhouette alpha cut, mask extraction
-  designs.ts    tattoo design library; one draw() feeds both the reference card and the score mask
+  main.ts       state machine (title → arriving → intro → inking → result → leaving → dayEnd), input, sim
+  scene.ts      parlor, customer rig (heightfield rear, hole pucker, swinging legs), gun, camera zoom
+  ps1.ts        two-pass renderer: low-res dithered world + crisp skin/ink layer
+  painter.ts    layered skin canvas (pixelated base / irritation / crisp ink), silhouette cut, masks
+  designs.ts    tattoo design library; one draw()/fill() feeds both the reference card and the score mask
+  jobs.ts       Hole / Cheek / Full Moon job specs (scale, zoom, tolerance, pay)
   customers.ts  customer generation, traits, reactions, Yelp-style reviews
+  portrait.ts   procedural 32×32 pixel-art faces with live moods
   scoring.ts    tolerant precision/recall scoring (pure)
   audio.ts      procedural tattoo-gun buzz + yelp (WebAudio, no assets)
 tests/
@@ -58,18 +78,27 @@ tests/
 Design decisions worth knowing:
 
 - **Planar UVs on a displaced plane.** The rear is a 220×220 plane displaced by `cheekHeight()`. Its UVs stay planar, so the scoring canvas and the visible surface share one coordinate space.
-- **Near head-on camera with a long lens** (`CAMERA_POS` in `scene.ts`). A steep camera angle parallax-warps strokes drawn across the crease: a screen-space circle came out heart-shaped in UV space and scored unfairly. Keep the camera roughly frontal if you change it.
+- **Near head-on camera with a long lens** (`CAMERA_POS` in `scene.ts`). A steep camera angle parallax-warps strokes drawn across the crease: a screen-space circle came out heart-shaped in UV space and scored unfairly. Zoom changes only the FOV for the same reason.
+- **Two-pass PS1 look** (`ps1.ts`). The world renders at ~270 px tall with vertex snapping and a Bayer-dithered palette. The skin and gun render crisp on top, so anything that should appear *in front of* the skin must also be on `HI_RES_LAYER`.
+- **The pucker is real geometry.** `setPucker()` pulls vertices near the hole inward. UVs don't move, so ink drawn mid-wink stretches when it relaxes.
 - **Silhouette via alpha cut.** The plane is cut to a rear-shaped outline (`silhouettePath()` in `painter.ts`) with `alphaTest`. Raycast hits outside the outline are ignored.
 - **Zero binary assets.** Every texture, sign, poster and sound is generated at runtime.
 
 ## Roadmap
 
-**Phase 1: MVP (this PR)**
+**Phase 1: MVP**
 - [x] 3D parlor, customer rig, tattoo gun that follows the surface
-- [x] 12 designs, randomized clients with traits, squirm, pain and flinch
+- [x] Randomized clients with traits, squirm, pain and flinch
 - [x] Tolerant precision/recall scoring with a unit test suite
 - [x] Results screen (your work vs. overlay), day loop, reviews, best-day record
 - [x] Mobile layout and touch input
+
+**Phase 1.5: Cheeky Business**
+- [x] PS1 pixel look, pixel-art portraits with live moods
+- [x] Hole / Cheek / Full Moon jobs, 20 designs incl. birds and tribal
+- [x] Puckering, winking hole; zoom
+- [x] Waddle-in / waddle-out
+- [x] GitHub Pages deploy
 
 **Phase 2: Depth**
 - [ ] Ink colors and fill/shading designs (score per color channel)
@@ -78,7 +107,7 @@ Design decisions worth knowing:
 - [ ] Stencil-free "freestyle" requests judged by a looser shape metric (e.g. Hu moments)
 
 **Phase 3: Juice**
-- [ ] Animated customer walk-in and bend-over
+- [ ] Bend-over animation (they currently waddle in pre-bent)
 - [ ] Hand-mirror reveal cinematic and reaction faces
 - [ ] Sound pass: shop ambience, voice barks
 - [ ] Shareable result cards (export PNG)

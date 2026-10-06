@@ -81,9 +81,9 @@ function woodFloor(): THREE.CanvasTexture {
 }
 
 function neonSign(text: string, color: string): THREE.CanvasTexture {
-  return canvasTexture(1024, 256, (ctx) => {
+  return canvasTexture(2048, 256, (ctx) => {
     ctx.fillStyle = '#0b0b12';
-    ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillRect(0, 0, 2048, 256);
     ctx.font = 'bold 150px "Trebuchet MS", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -91,11 +91,11 @@ function neonSign(text: string, color: string): THREE.CanvasTexture {
     for (const blur of [60, 30, 12]) {
       ctx.shadowBlur = blur;
       ctx.fillStyle = color;
-      ctx.fillText(text, 512, 136);
+      ctx.fillText(text, 1024, 136);
     }
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#fff6fb';
-    ctx.fillText(text, 512, 136);
+    ctx.fillText(text, 1024, 136);
   });
 }
 
@@ -117,23 +117,51 @@ export interface World {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
-  /** Moves as a unit when the customer squirms. */
+  /** Moves as a unit when the customer squirms or walks. */
   customer: THREE.Group;
-  /** The paintable mesh (raycast target). */
+  /** Hip pivots; rotate on X to swing the legs while waddling. */
+  legs: THREE.Group[];
+  /** The paintable mesh (raycast target). Lives on HI_RES_LAYER. */
   canvasMesh: THREE.Mesh;
   /** Mesh materials that should follow the customer's skin tone. */
   skinMaterials: THREE.MeshStandardMaterial[];
   shirtMaterial: THREE.MeshStandardMaterial;
   gun: THREE.Group;
   gunLight: THREE.PointLight;
+  /** PS1 vertex-snap grid (half the low-res render size), shared by all world materials. */
+  snapRes: { value: THREE.Vector2 };
+  /** 0 = relaxed, 1 = fully puckered. Physically pulls the skin (and the ink) toward the hole. */
+  setPucker(amount: number): void;
+  /** Recompute the camera's projection after the zoom or the window changes. `fov` is the landscape FOV. */
+  setFov(fov: number): void;
   resize(): void;
 }
 
+/** Objects on this layer skip the low-res PS1 pass and render crisp (the skin and the gun). */
+export const HI_RES_LAYER = 1;
+
+export const ZOOM = {
+  wide: { fov: BASE_FOV, target: new THREE.Vector3(0, -0.3, 0) },
+  close: { fov: 9, target: new THREE.Vector3(0, 0, 0) },
+} as const;
+
+/** Patch a material so its vertices snap to the low-res pixel grid: the PS1 wobble. */
+function ps1Snap(mat: THREE.Material, snapRes: { value: THREE.Vector2 }): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSnap = snapRes;
+    shader.vertexShader = 'uniform vec2 uSnap;\n' + shader.vertexShader.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+      gl_Position.xy = floor(gl_Position.xy / gl_Position.w * uSnap + 0.5) / uSnap * gl_Position.w;`,
+    );
+  };
+}
+
 export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture): World {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   container.appendChild(renderer.domElement);
@@ -142,31 +170,33 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   scene.background = new THREE.Color('#120d16');
   scene.fog = new THREE.Fog('#120d16', 12, 26);
 
-  // Near head-on with a long lens: a steep camera angle would parallax-warp strokes drawn
-  // across the crease, so what the player draws on screen wouldn't match what gets scored.
+  // Fixed position, near head-on, long lens. Zoom changes only the FOV: moving the camera
+  // or steepening its angle would parallax-warp strokes drawn across the crease, so what
+  // the player draws on screen wouldn't match what gets scored.
   const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 60);
-  camera.position.set(0, CAMERA_POS.y, CAMERA_POS.z);
+  camera.position.copy(CAMERA_POS);
   camera.lookAt(CAMERA_TARGET);
 
   // ---------- Lighting ----------
-  scene.add(new THREE.HemisphereLight('#ffe9d6', '#2a1830', 0.9));
+  // Lights must see both layers or the crisp pass would render unlit.
+  const hemi = new THREE.HemisphereLight('#ffe9d6', '#2a1830', 0.9);
   const key = new THREE.SpotLight('#fff1e0', 60, 16, Math.PI / 6, 0.5, 1.4);
   key.position.set(2.2, 5, 4);
   key.target.position.set(0, -0.2, 0);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.mapSize.set(1024, 1024);
   key.shadow.bias = -0.0004;
-  scene.add(key, key.target);
+  key.shadow.camera.layers.enableAll();
   const rim = new THREE.PointLight('#ff3fa4', 14, 9);
   rim.position.set(-3, 2.5, -3);
-  scene.add(rim);
   const fill = new THREE.PointLight('#6fc3ff', 5, 10);
   fill.position.set(3.5, 0.5, 2);
-  scene.add(fill);
+  for (const l of [hemi, key, rim, fill]) l.layers.enableAll();
+  scene.add(hemi, key, key.target, rim, fill);
 
   // ---------- Room ----------
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 30),
+    new THREE.PlaneGeometry(30, 30, 30, 30),
     new THREE.MeshStandardMaterial({ map: woodFloor(), roughness: 0.8 }),
   );
   floor.rotation.x = -Math.PI / 2;
@@ -187,8 +217,8 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   }
 
   const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(4.4, 1.1),
-    new THREE.MeshBasicMaterial({ map: neonSign('CHEEK INK', '#ff3fa4'), toneMapped: false }),
+    new THREE.PlaneGeometry(6.4, 0.8),
+    new THREE.MeshBasicMaterial({ map: neonSign('CHEEKY BUSINESS', '#ff3fa4'), toneMapped: false }),
   );
   sign.position.set(0, 2.6, -6.45);
   scene.add(sign);
@@ -214,33 +244,36 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   scene.add(bench);
   const chrome = new THREE.MeshStandardMaterial({ color: '#c9c9d4', roughness: 0.25, metalness: 0.9 });
   for (const [x, z] of [[-0.8, -1.1], [0.8, -1.1], [-0.8, -3.5], [0.8, -3.5]]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.75), chrome);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.75, 6), chrome);
     leg.position.set(x, FLOOR_Y + 0.87, z);
     scene.add(leg);
   }
 
-  // Ink caps tray, for set dressing.
+  // Ink caps tray, for set dressing. Kept behind the customer's plane (z < 0) because the
+  // crisp pass draws the skin over everything in the low-res pass.
+  const trayZ = -0.9;
   const tray = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), chrome);
-  tray.position.set(2.3, -0.9, 0.6);
+  tray.position.set(2.6, -0.9, trayZ);
   scene.add(tray);
   const capColors = ['#111', '#c0182c', '#1f6fd6', '#21a35a', '#f2c61f'];
   capColors.forEach((c, i) => {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 16), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
-    cap.position.set(2.0 + i * 0.15, -0.84, 0.6);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
+    cap.position.set(2.3 + i * 0.15, -0.84, trayZ);
     scene.add(cap);
   });
-  const trayStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5), chrome);
-  trayStand.position.set(2.3, FLOOR_Y + 1.25, 0.6);
+  const trayStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 6), chrome);
+  trayStand.position.set(2.6, FLOOR_Y + 1.25, trayZ);
   scene.add(trayStand);
 
   // ---------- Customer ----------
   const customer = new THREE.Group();
   scene.add(customer);
 
-  const skin = new THREE.MeshStandardMaterial({ color: '#e0b090', roughness: 0.6 });
+  const skin = new THREE.MeshStandardMaterial({ color: '#e0b090', roughness: 0.6, flatShading: true });
   // alphaTest cuts the plane down to the silhouette painted into the texture's alpha.
   const canvasMat = new THREE.MeshStandardMaterial({ map: paintTexture, roughness: 0.55, alphaTest: 0.5 });
-  const geo = new THREE.PlaneGeometry(CANVAS_SIZE, CANVAS_SIZE, 220, 220);
+  const SEG = 220;
+  const geo = new THREE.PlaneGeometry(CANVAS_SIZE, CANVAS_SIZE, SEG, SEG);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) {
     pos.setZ(i, cheekHeight(pos.getX(i), pos.getY(i)));
@@ -248,7 +281,34 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   geo.computeVertexNormals();
   const canvasMesh = new THREE.Mesh(geo, canvasMat);
   canvasMesh.castShadow = canvasMesh.receiveShadow = true;
+  canvasMesh.layers.set(HI_RES_LAYER);
   customer.add(canvasMesh);
+
+  // Pucker: remember the rest pose of the vertices near the hole.
+  const rest = Float32Array.from(pos.array as Float32Array);
+  const near: number[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    const x = rest[i * 3];
+    const y = rest[i * 3 + 1];
+    if (x * x + y * y < 0.35 * 0.35) near.push(i);
+  }
+  let lastPucker = 0;
+  function setPucker(amount: number): void {
+    if (Math.abs(amount - lastPucker) < 0.01) return;
+    lastPucker = amount;
+    const arr = pos.array as Float32Array;
+    for (const i of near) {
+      const x = rest[i * 3];
+      const y = rest[i * 3 + 1];
+      const r2 = x * x + y * y;
+      const f = amount * 0.45 * Math.exp(-r2 / 0.012);
+      arr[i * 3] = x * (1 - f);
+      arr[i * 3 + 1] = y * (1 - f);
+      arr[i * 3 + 2] = rest[i * 3 + 2] - amount * 0.05 * Math.exp(-r2 / 0.004);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+  }
 
   // Torso running away from the camera, hidden behind the skin except for a hiked-up shirt.
   const half = CANVAS_SIZE / 2;
@@ -256,42 +316,44 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   torso.position.set(0, 0.3, 0.15 - 1.3);
   torso.castShadow = true;
   customer.add(torso);
-  const shirtMaterial = new THREE.MeshStandardMaterial({ color: '#3d6fb6', roughness: 0.9 });
+  const shirtMaterial = new THREE.MeshStandardMaterial({ color: '#3d6fb6', roughness: 0.9, flatShading: true });
   const shirt = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.2, 2.4), shirtMaterial);
   shirt.position.set(0, half - 0.45, 0.12 - 1.2);
   shirt.castShadow = true;
   customer.add(shirt);
   // A roll of shirt fabric at the hem.
-  const hem = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 1.85, 6, 12), shirtMaterial);
+  const hem = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 1.85, 3, 6), shirtMaterial);
   hem.rotation.z = Math.PI / 2;
   hem.position.set(0, half - 0.02, 0.22);
   customer.add(hem);
 
-  // Legs, with jeans bunched around the knees.
-  const denim = new THREE.MeshStandardMaterial({ color: '#2f4a73', roughness: 0.95 });
+  // Legs on hip pivots (so they can swing), jeans bunched at the knees.
+  const denim = new THREE.MeshStandardMaterial({ color: '#2f4a73', roughness: 0.95, flatShading: true });
   const sock = new THREE.MeshStandardMaterial({ color: '#f2f2f2', roughness: 1 });
   const shoe = new THREE.MeshStandardMaterial({ color: '#202020', roughness: 0.6 });
   const legLen = 1.4;
+  const hipY = -0.7;
+  const legs: THREE.Group[] = [];
   for (const side of [-1, 1]) {
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, legLen, 24), skin);
-    thigh.position.set(side * 0.58, -0.7 - legLen / 2, -0.5);
-    thigh.castShadow = true;
-    customer.add(thigh);
-    const jeans = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.17, 12, 24), denim);
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.58, hipY, -0.5);
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, legLen, 10), skin);
+    thigh.position.y = -legLen / 2;
+    const jeans = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.17, 6, 10), denim);
     jeans.rotation.x = Math.PI / 2;
-    jeans.position.set(side * 0.58, -2.15, -0.5);
-    jeans.castShadow = true;
-    customer.add(jeans);
-    const jeansLower = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.42, 0.75, 20), denim);
-    jeansLower.position.set(side * 0.58, -2.6, -0.5);
-    customer.add(jeansLower);
-    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.33, 0.35, 16), sock);
-    s.position.set(side * 0.58, -3.08, -0.5);
-    customer.add(s);
+    jeans.position.y = -2.15 - hipY;
+    const jeansLower = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.42, 0.75, 10), denim);
+    jeansLower.position.y = -2.6 - hipY;
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.33, 0.35, 8), sock);
+    s.position.y = -3.08 - hipY;
     const foot = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.95), shoe);
-    foot.position.set(side * 0.58, FLOOR_Y + 0.11, -0.75);
-    foot.castShadow = true;
-    customer.add(foot);
+    foot.position.set(0, FLOOR_Y + 0.11 - hipY, -0.25);
+    for (const m of [thigh, jeans, jeansLower, s, foot]) {
+      m.castShadow = true;
+      pivot.add(m);
+    }
+    customer.add(pivot);
+    legs.push(pivot);
   }
   // Belt buckle peeking out of the jeans bundle.
   const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.05), chrome);
@@ -307,43 +369,58 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   const gunGrip = new THREE.MeshStandardMaterial({ color: '#d1263b', roughness: 0.5 });
   const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.18), chrome);
   needle.position.y = 0.09;
-  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.022, 0.35, 16), gunMetal);
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.022, 0.35, 8), gunMetal);
   tube.position.y = 0.33;
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.42, 20), gunGrip);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.42, 8), gunGrip);
   grip.position.y = 0.68;
-  const coil1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 16), gunMetal);
+  const coil1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 8), gunMetal);
   coil1.position.set(0.09, 0.82, 0);
   coil1.rotation.z = Math.PI / 2;
   const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.2), new THREE.MeshStandardMaterial({ color: '#111' }));
   cord.position.y = 1.48;
   gun.add(needle, tube, grip, coil1, cord);
-  gun.traverse((o) => { o.castShadow = true; });
+  gun.traverse((o) => {
+    o.castShadow = true;
+    o.layers.set(HI_RES_LAYER);
+  });
   scene.add(gun);
   const gunLight = new THREE.PointLight('#ffdcb0', 0, 1.2);
   gunLight.position.y = 0.05;
+  gunLight.layers.enableAll();
   gun.add(gunLight);
 
+  // PS1 vertex wobble on everything in the low-res pass.
+  const snapRes = { value: new THREE.Vector2(160, 120) };
+  const patched = new WeakSet<THREE.Material>();
+  scene.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || o.layers.isEnabled(HI_RES_LAYER)) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (patched.has(m)) continue;
+      patched.add(m);
+      ps1Snap(m, snapRes);
+    }
+  });
+
+  let landscapeFov = BASE_FOV;
+  function setFov(fov: number): void {
+    landscapeFov = fov;
+    // Keep the frame's width on narrow (portrait) screens.
+    camera.fov = camera.aspect < 1 ? fov / Math.max(0.55, camera.aspect) : fov;
+    camera.updateProjectionMatrix();
+  }
   function resize(): void {
     const w = container.clientWidth;
     const h = container.clientHeight;
     renderer.setSize(w, h);
     camera.aspect = w / h;
-    // Keep the whole canvas in frame on narrow (portrait) screens.
-    camera.fov = camera.aspect < 1 ? BASE_FOV / Math.max(0.55, camera.aspect) : BASE_FOV;
-    camera.updateProjectionMatrix();
+    setFov(landscapeFov);
   }
   resize();
 
   return {
-    renderer,
-    scene,
-    camera,
-    customer,
-    canvasMesh,
-    skinMaterials: [skin],
-    shirtMaterial,
-    gun,
-    gunLight,
-    resize,
+    renderer, scene, camera, customer, legs, canvasMesh,
+    skinMaterials: [skin], shirtMaterial, gun, gunLight, snapRes,
+    setPucker, setFov, resize,
   };
 }
