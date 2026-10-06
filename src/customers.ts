@@ -116,7 +116,7 @@ export function pickJob(day: number, rand: () => number = Math.random): JobKind 
 }
 
 export interface CustomerOptions {
-  /** Force a job type (Demo Day, tutorial). */
+  /** Force a job type (e.g. the tutorial client). */
   job?: JobKind;
   /** Force a trait by label, e.g. 'Calm as a cucumber'. */
   trait?: string;

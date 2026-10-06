@@ -16,12 +16,6 @@ import { GunAudio } from './audio';
 import { aside, nextSideGag, type SideGag } from './humor';
 
 const CLIENTS_PER_DAY = 5;
-/** Demo Day: one of each job type, gentle clients, ~3 minutes. */
-const DEMO_SCRIPT: CustomerOptions[] = [
-  { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' },
-  { job: 'hole', trait: 'Nervous winker', design: 'birdeye' },
-  { job: 'moon', trait: 'Ticklish', design: 'phoenix' },
-];
 /** The very first client of a fresh game is a softball. */
 const TUTORIAL_CLIENT: CustomerOptions = { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' };
 const BEST_KEY = 'cheeky-business:best-day';
@@ -53,8 +47,6 @@ let pointerDown = false;
 
 const state = {
   phase: 'title' as Phase,
-  /** Demo Day mode: scripted 3-client run. */
-  demo: false,
   clientsToday: CLIENTS_PER_DAY,
   day: 1,
   clientIndex: 0,
@@ -168,7 +160,7 @@ document.addEventListener('click', (e) => {
 });
 
 function updateTopHud(): void {
-  $('hud-day').textContent = state.demo ? 'Demo Day' : `Day ${state.day}`;
+  $('hud-day').textContent = `Day ${state.day}`;
   $('hud-client').textContent = `Client ${Math.min(state.clientIndex + 1, state.clientsToday)}/${state.clientsToday}`;
   $('hud-cash').textContent = `$${state.cash.toLocaleString()}`;
 }
@@ -262,8 +254,7 @@ function showTitle(): void {
      </ul>
      ${best ? `<p>Best single-day earnings: <strong style="color:var(--green)">$${best}</strong></p>` : ''}`,
     [
-      { label: 'Open the shop', onClick: () => startDay(1, false) },
-      { label: 'Demo Day (3 clients)', primary: true, onClick: () => startDay(1, true) },
+      { label: 'Play', primary: true, onClick: () => startDay(1) },
     ],
   );
   const logo = makeLogo();
@@ -271,10 +262,9 @@ function showTitle(): void {
   card.querySelector('.logo-wrap')!.appendChild(logo);
 }
 
-function startDay(day: number, demo = state.demo): void {
+function startDay(day: number): void {
   hideModal();
-  state.demo = demo;
-  state.clientsToday = demo ? DEMO_SCRIPT.length : CLIENTS_PER_DAY;
+  state.clientsToday = CLIENTS_PER_DAY;
   state.day = day;
   state.clientIndex = 0;
   state.dayCash = 0;
@@ -312,9 +302,7 @@ async function arrive(): Promise<void> {
 }
 
 function nextClient(): void {
-  const opts = state.demo
-    ? DEMO_SCRIPT[state.clientIndex]
-    : state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
+  const opts = state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
   const c = makeCustomer(state.day, Math.random, state.usedDesigns, {
     ...opts,
     avoidNames: state.results.map((r) => r.customer.name),
@@ -377,7 +365,7 @@ function startInking(): void {
   state.winkTimer = 2 + Math.random() * 2;
   // Most clients pull one random side gag, somewhere in the middle of the job.
   const total = state.timeLimit + c.job.timeBonus;
-  const tutorial = state.day === 1 && state.clientIndex === 0 && !state.demo;
+  const tutorial = state.day === 1 && state.clientIndex === 0;
   state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
   state.squirmBoost = 0;
   setZoom(c.job.zoom === 'close' ? 1 : 0);
@@ -481,7 +469,7 @@ function finishJob(): void {
         },
       },
       {
-        label: lastOfDay ? (state.demo ? 'Finish demo' : 'Close up shop') : 'Next client',
+        label: lastOfDay ? 'Close up shop' : 'Next client',
         primary: true,
         onClick: () => {
           hideModal();
@@ -503,37 +491,22 @@ function endDay(): void {
   const avg = Math.round(state.results.reduce((s, r) => s + r.score.score, 0) / state.results.length);
   const usedReviews = new Set<string>();
   const reviews = state.results.map((r) => `<li>${escapeHtml(reviewFor(r.score.score, r.customer, usedReviews))}</li>`).join('');
-  if (state.demo) {
-    showModal(
-      `<h2>Demo complete!</h2>
-       <p>You earned <strong style="color:var(--green)">$${state.dayCash}</strong> · average likeness <strong>${avg}%</strong></p>
-       <p style="margin-bottom:0">Your reviews:</p>
-       <ul class="reviews">${reviews}</ul>
-       <p style="font-size:13px">The full game runs five clients a day, and every day they get squirmier.
-       <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
-      [
-        { label: 'Back to title', onClick: showTitle },
-        { label: 'Play the full game', primary: true, onClick: () => startDay(1, false) },
-      ],
-    );
-  } else {
-    const best = readBest();
-    const record = state.dayCash > best;
-    if (record) writeBest(state.dayCash);
-    showModal(
-      `<h2>Day ${state.day} complete</h2>
-       <p>Earned <strong style="color:var(--green)">$${state.dayCash}</strong> today · average likeness <strong>${avg}%</strong>
-       ${record ? ' · <strong style="color:var(--yellow)">New record!</strong>' : ''}</p>
-       <p style="margin-bottom:0">Your online reviews:</p>
-       <ul class="reviews">${reviews}</ul>
-       <p style="font-size:13px">Tomorrow's clients are more caffeinated, puckerier, and you get less time.
-       <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
-      [
-        { label: 'Quit to title', onClick: showTitle },
-        { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
-      ],
-    );
-  }
+  const best = readBest();
+  const record = state.dayCash > best;
+  if (record) writeBest(state.dayCash);
+  showModal(
+    `<h2>Day ${state.day} complete</h2>
+     <p>Earned <strong style="color:var(--green)">$${state.dayCash}</strong> today · average likeness <strong>${avg}%</strong>
+     ${record ? ' · <strong style="color:var(--yellow)">New record!</strong>' : ''}</p>
+     <p style="margin-bottom:0">Your online reviews:</p>
+     <ul class="reviews">${reviews}</ul>
+     <p style="font-size:13px">Tomorrow's clients are more caffeinated, puckerier, and you get less time.
+     <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
+    [
+      { label: 'Quit to title', onClick: showTitle },
+      { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
+    ],
+  );
 }
 
 // ---------- Input ----------

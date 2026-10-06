@@ -15,8 +15,7 @@ lives at `https://<owner>.github.io/<repo>/`.
 
 ## Modes
 
-- **Demo Day** (title screen, recommended for showing people): three scripted clients, one of each job type, about 3 minutes.
-- **Open the shop**: the full game. Five random clients a day, with each day squirmier and shorter on time. The very first client is always an easy one.
+- **Play**: five random clients a day, with each day squirmier and shorter on time. The very first client is always an easy one.
 
 After any job, **📸 Share** makes a 1080×1350 result card (your work vs. the request, grade, client quote). On phones it opens the share sheet; on desktop it downloads.
 
@@ -65,7 +64,7 @@ npm run build      # typecheck + production build to dist/
 4. **Coverage (recall)**: how much of the design has ink within that tolerance. This catches half-finished work.
 5. **Likeness** = F1 of the two, curved downward (`f1^1.6`). Grades run S / A / B / C / D / F. Under 30% means the client refuses to pay.
 
-### Tuning baseline (simulated player, Demo Day)
+### Tuning baseline (simulated player; Big Heart, Bird's-Eye View, Phoenix Rising)
 
 | Hand | Big Heart (cheek) | Bird's-Eye View (hole) | Phoenix Rising (moon) |
 |---|---|---|---|
@@ -124,7 +123,7 @@ Design decisions worth knowing:
 - [x] Walk-in, pants drop, bend-over cutscene; stand up and waddle out
 - [x] Bolder hole that reads in the wide shot
 - [x] Pixel logo title screen
-- [x] Demo Day mode and an easy first client
+- [x] Easy first client (tutorial); Demo Day mode later removed in favor of just playing
 - [x] Share card
 - [x] Humor pass: deadpan asides on every screen
 - [x] Women clients (names, portraits, 3D hairstyles) and body-type variety for everyone

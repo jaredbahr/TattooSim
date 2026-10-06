@@ -100,17 +100,32 @@ function neonSign(text: string, color: string): THREE.CanvasTexture {
   });
 }
 
+/**
+ * Poster texture. The world renders at ~270 px tall, so posters use few words, one font
+ * size fitted to the widest line, and heavy contrast. Short lines read; long ones turn to mush.
+ */
 function poster(lines: string[], bg: string, fg: string): THREE.CanvasTexture {
-  return canvasTexture(256, 360, (ctx) => {
+  const W = 512;
+  const H = 592;
+  return canvasTexture(W, H, (ctx) => {
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 256, 360);
+    ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = fg;
-    ctx.lineWidth = 8;
-    ctx.strokeRect(14, 14, 228, 332);
+    ctx.lineWidth = 18;
+    ctx.strokeRect(18, 18, W - 36, H - 36);
     ctx.fillStyle = fg;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 34px Impact, "Arial Black", sans-serif';
-    lines.forEach((l, i) => ctx.fillText(l, 128, 90 + i * 52));
+    ctx.textBaseline = 'middle';
+    const family = 'Impact, "Arial Black", sans-serif';
+    const maxW = W - 100;
+    const lineH = (H - 110) / lines.length;
+    let size = Math.min(170, lineH * 0.92);
+    ctx.font = `bold ${size}px ${family}`;
+    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    if (widest > maxW) size *= maxW / widest;
+    ctx.font = `bold ${size}px ${family}`;
+    const top = H / 2 - (lineH * (lines.length - 1)) / 2;
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lineH));
   });
 }
 
@@ -234,17 +249,24 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   sign.position.set(0, 2.6, -6.45);
   scene.add(sign);
 
+  // Back-wall posters flank the client, where they're visible during play. Side-wall ones
+  // show during walk-ins (the entrance camera is wider). Unlit, so the dim room can't mute them.
+  const POSTER_W = 1.9;
+  const POSTER_H = 2.2;
   const posters: [string[], string, string, number, number, number][] = [
-    [['TATTOOS', 'ARE', 'PERMANENT'], '#f4e04d', '#1b1b1b', -4.2, 0.9, -6.44],
-    [['NO', 'REFUNDS', 'NO', 'REGRETS'], '#1b1b1b', '#f4e04d', 4.2, 0.9, -6.44],
-    [['WE DO', 'NOT DO', 'FACES'], '#e94b3c', '#fff', -5.45, 0.6, -2.5],
-    [['TIP', 'YOUR', 'ARTIST'], '#3cc3e9', '#fff', 5.45, 0.6, -2.5],
-    [['NO', 'SITTING', 'ON THE', 'ART'], '#f2f2f2', '#1b1b1b', -2.75, -0.35, -6.44],
-    [['PLEASE', 'DO NOT', 'FART ON', 'ARTIST'], '#ff8a3c', '#1b1b1b', 2.95, -0.35, -6.44],
-    [['CRACK', 'OF DAWN', 'SPECIAL'], '#2fd58a', '#1b1b1b', -5.45, 0.4, 2.2],
+    [['TATTOOS', 'ARE', 'PERMANENT'], '#f4e04d', '#1b1b1b', -3.45, 1.05, -6.44],
+    [['NO', 'REFUNDS'], '#1b1b1b', '#f4e04d', 3.45, 1.05, -6.44],
+    [['NO SITTING', 'ON THE', 'ART'], '#f2f2f2', '#1b1b1b', -3.45, -1.45, -6.44],
+    [['DO NOT', 'FART ON', 'ARTIST'], '#ff8a3c', '#1b1b1b', 3.45, -1.45, -6.44],
+    [['WE DO', 'NOT DO', 'FACES'], '#e94b3c', '#ffffff', -5.45, 0.6, -2.6],
+    [['TIP', 'YOUR', 'ARTIST'], '#3cc3e9', '#ffffff', 5.45, 0.6, -2.6],
+    [['CRACK', 'OF DAWN', 'SPECIAL'], '#2fd58a', '#1b1b1b', -5.45, 0.6, 0.4],
   ];
   for (const [lines, bg, fg, x, y, z] of posters) {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.55), new THREE.MeshStandardMaterial({ map: poster(lines, bg, fg), roughness: 0.7 }));
+    const p = new THREE.Mesh(
+      new THREE.PlaneGeometry(POSTER_W, POSTER_H),
+      new THREE.MeshBasicMaterial({ map: poster(lines, bg, fg), toneMapped: false, fog: false }),
+    );
     p.position.set(x, y, z);
     if (Math.abs(x) > 5) p.rotation.y = -Math.sign(x) * Math.PI / 2;
     scene.add(p);
