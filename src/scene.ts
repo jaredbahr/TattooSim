@@ -6,6 +6,7 @@
  * camera maps 1:1 onto the scoring canvas.
  */
 import * as THREE from 'three';
+import { silhouettePath } from './painter';
 
 export const CANVAS_SIZE = 2.4; // world units spanned by the paintable plane (UV 0..1)
 const FLOOR_Y = -3.4;
@@ -126,12 +127,20 @@ export interface World {
   /** Mesh materials that should follow the customer's skin tone. */
   skinMaterials: THREE.MeshStandardMaterial[];
   shirtMaterial: THREE.MeshStandardMaterial;
+  hairMaterial: THREE.MeshStandardMaterial;
+  /** Hair mesh on the back of the head; hidden for bald clients. */
+  hair: THREE.Mesh;
   gun: THREE.Group;
   gunLight: THREE.PointLight;
   /** PS1 vertex-snap grid (half the low-res render size), shared by all world materials. */
   snapRes: { value: THREE.Vector2 };
   /** 0 = relaxed, 1 = fully puckered. Physically pulls the skin (and the ink) toward the hole. */
   setPucker(amount: number): void;
+  /**
+   * Body pose. `upright` 1 = standing, 0 = bent over the bench (pivots at the waist).
+   * `pantsUp` 1 = jeans on, 0 = bunched at the knees.
+   */
+  setPose(upright: number, pantsUp: number): void;
   /** Recompute the camera's projection after the zoom or the window changes. `fov` is the landscape FOV. */
   setFov(fov: number): void;
   resize(): void;
@@ -143,6 +152,8 @@ export const HI_RES_LAYER = 1;
 export const ZOOM = {
   wide: { fov: BASE_FOV, target: new THREE.Vector3(0, -0.3, 0) },
   close: { fov: 9, target: new THREE.Vector3(0, 0, 0) },
+  /** Pulled back far enough to see a standing client, head to toe. */
+  entrance: { fov: 58, target: new THREE.Vector3(0, 0.6, 0) },
 } as const;
 
 /** Patch a material so its vertices snap to the low-res pixel grid: the PS1 wobble. */
@@ -237,7 +248,7 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   }
 
   // Bench the customer bends over.
-  const leather = new THREE.MeshStandardMaterial({ color: '#1a1a1f', roughness: 0.35, metalness: 0.1 });
+  const leather = new THREE.MeshStandardMaterial({ color: '#6a1f2e', roughness: 0.4, metalness: 0.05 });
   const bench = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 2.8), leather);
   bench.position.set(0, -1.45, -2.3);
   bench.castShadow = bench.receiveShadow = true;
@@ -310,22 +321,93 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
     geo.computeVertexNormals();
   }
 
-  // Torso running away from the camera, hidden behind the skin except for a hiked-up shirt.
+  // Upper body on a waist pivot at the top of the rear. Bent (rotation 0): the torso runs
+  // away from the camera over the bench. Upright (rotation π/2): it stands straight up.
   const half = CANVAS_SIZE / 2;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.8, 2.6), skin);
-  torso.position.set(0, 0.3, 0.15 - 1.3);
+  const upper = new THREE.Group();
+  upper.position.set(0, 1.0, -0.4);
+  customer.add(upper);
+  const local = <T extends THREE.Object3D>(m: T, x: number, y: number, z: number): T => {
+    m.position.set(x, y - upper.position.y, z - upper.position.z);
+    upper.add(m);
+    return m;
+  };
+  const torso = local(new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.8, 2.6), skin), 0, 0.3, 0.15 - 1.3);
   torso.castShadow = true;
-  customer.add(torso);
   const shirtMaterial = new THREE.MeshStandardMaterial({ color: '#3d6fb6', roughness: 0.9, flatShading: true });
-  const shirt = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.2, 2.4), shirtMaterial);
-  shirt.position.set(0, half - 0.45, 0.12 - 1.2);
+  const shirt = local(new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.2, 2.4), shirtMaterial), 0, half - 0.45, 0.12 - 1.2);
   shirt.castShadow = true;
-  customer.add(shirt);
   // A roll of shirt fabric at the hem.
   const hem = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 1.85, 3, 6), shirtMaterial);
   hem.rotation.z = Math.PI / 2;
-  hem.position.set(0, half - 0.02, 0.22);
-  customer.add(hem);
+  local(hem, 0, half - 0.02, 0.22);
+  // Shoulders, head and hair at the far end of the torso.
+  const shoulders = local(new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 0.7), shirtMaterial), 0, 0.55, -2.55);
+  shoulders.castShadow = true;
+  const head = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), skin), 0, 0.55, -3.3);
+  head.castShadow = true;
+  const hairMaterial = new THREE.MeshStandardMaterial({ color: '#2b1d14', roughness: 1, flatShading: true });
+  // Hair caps the back/top of the head: rel +y faces the camera when standing, rel -z is "up".
+  const hair = local(new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 1), hairMaterial), 0, 0.68, -3.4);
+  hair.scale.set(1, 0.85, 1);
+  // Arms hang from the shoulders; their pivots counter-rotate so they always dangle downward.
+  const armPivots: THREE.Group[] = [];
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    local(pivot, side * 1.25, 0.55, -2.55);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.24, 0.6, 8), shirtMaterial);
+    sleeve.position.y = -0.25;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 1.3, 8), skin);
+    arm.position.y = -0.9;
+    const hand = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), skin);
+    hand.position.y = -1.6;
+    for (const m of [sleeve, arm, hand]) {
+      m.castShadow = true;
+      pivot.add(m);
+    }
+    armPivots.push(pivot);
+  }
+
+  // Jeans seat: a denim copy of the rear surface that slides down when the pants drop.
+  // Lives on HI_RES_LAYER because it has to draw over the (crisp) skin.
+  const seatTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 512;
+    const ctx = c.getContext('2d')!;
+    ctx.scale(0.5, 0.5);
+    ctx.clip(silhouettePath());
+    ctx.fillStyle = '#2f4a73';
+    ctx.fillRect(0, 0, 1024, 1024);
+    for (let i = 0; i < 1400; i++) {
+      ctx.fillStyle = Math.random() < 0.5 ? '#3a5884' : '#263d60';
+      ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 6, 2);
+    }
+    ctx.strokeStyle = '#d99a3a';
+    ctx.lineWidth = 6;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath();
+    ctx.moveTo(512, 150);
+    ctx.lineTo(512, 760);
+    for (const x of [300, 724]) {
+      ctx.moveTo(x - 120, 420);
+      ctx.lineTo(x + 120, 420);
+      ctx.lineTo(x + 105, 600);
+      ctx.lineTo(x, 650);
+      ctx.lineTo(x - 105, 600);
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#3b2414';
+    ctx.fillRect(0, 30, 1024, 70);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const seat = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: seatTex, roughness: 0.95, alphaTest: 0.5 }));
+  seat.scale.set(1.02, 1.02, 1.06);
+  seat.position.z = 0.02;
+  seat.layers.set(HI_RES_LAYER);
+  customer.add(seat);
 
   // Legs on hip pivots (so they can swing), jeans bunched at the knees.
   const denim = new THREE.MeshStandardMaterial({ color: '#2f4a73', roughness: 0.95, flatShading: true });
@@ -334,10 +416,13 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   const legLen = 1.4;
   const hipY = -0.7;
   const legs: THREE.Group[] = [];
+  // Thighs switch between skin and denim depending on whether the pants are up.
+  const thighMat = skin.clone();
+  const jeansBundles: THREE.Object3D[] = [];
   for (const side of [-1, 1]) {
     const pivot = new THREE.Group();
     pivot.position.set(side * 0.58, hipY, -0.5);
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, legLen, 10), skin);
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, legLen, 10), thighMat);
     thigh.position.y = -legLen / 2;
     const jeans = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.17, 6, 10), denim);
     jeans.rotation.x = Math.PI / 2;
@@ -354,14 +439,32 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
     }
     customer.add(pivot);
     legs.push(pivot);
+    jeansBundles.push(jeans);
   }
   // Belt buckle peeking out of the jeans bundle.
+  const beltGroup = new THREE.Group();
   const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.05), chrome);
-  buckle.position.set(0, -2.15, 0.2);
-  customer.add(buckle);
+  buckle.position.z = 0.05;
   const belt = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.12, 0.06), new THREE.MeshStandardMaterial({ color: '#3b2414', roughness: 0.7 }));
-  belt.position.set(0, -2.15, 0.15);
-  customer.add(belt);
+  beltGroup.add(buckle, belt);
+  beltGroup.position.set(0, -2.15, 0.15);
+  customer.add(beltGroup);
+
+  const denimColor = new THREE.Color('#2f4a73');
+  const skinColor = new THREE.Color();
+  function setPose(upright: number, pantsUp: number): void {
+    upper.rotation.x = upright * (Math.PI / 2);
+    for (const a of armPivots) a.rotation.x = -upper.rotation.x;
+    // Pants: the seat slides down and squashes into the bundle at the knees.
+    seat.visible = pantsUp > 0.02;
+    seat.position.y = -(1 - pantsUp) * 2.3;
+    seat.scale.y = 1.02 * (0.25 + 0.75 * pantsUp);
+    beltGroup.position.y = THREE.MathUtils.lerp(-2.15, half + 0.02, pantsUp);
+    beltGroup.position.z = THREE.MathUtils.lerp(0.15, 0.45, pantsUp);
+    for (const j of jeansBundles) j.scale.setScalar(pantsUp > 0.5 ? 0.85 : 1);
+    skinColor.copy(skin.color);
+    thighMat.color.copy(pantsUp > 0.5 ? denimColor : skinColor);
+  }
 
   // ---------- Tattoo gun ----------
   const gun = new THREE.Group();
@@ -420,7 +523,7 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
 
   return {
     renderer, scene, camera, customer, legs, canvasMesh,
-    skinMaterials: [skin], shirtMaterial, gun, gunLight, snapRes,
-    setPucker, setFov, resize,
+    skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial, hair, gun, gunLight, snapRes,
+    setPucker, setPose, setFov, resize,
   };
 }

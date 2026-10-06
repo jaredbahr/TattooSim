@@ -6,13 +6,23 @@
 import * as THREE from 'three';
 import { buildWorld, CAMERA_POS, HI_RES_LAYER, ZOOM } from './scene';
 import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor } from './painter';
-import { makeCustomer, reactionFor, reviewFor, type Customer } from './customers';
+import { makeCustomer, reactionFor, reviewFor, type Customer, type CustomerOptions } from './customers';
+import { makeLogo } from './logo';
+import { buildShareCard, shareCard } from './share';
 import { scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
 
 const CLIENTS_PER_DAY = 5;
+/** Demo Day: one of each job type, gentle clients, ~3 minutes. */
+const DEMO_SCRIPT: CustomerOptions[] = [
+  { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' },
+  { job: 'hole', trait: 'Nervous winker', design: 'birdeye' },
+  { job: 'moon', trait: 'Ticklish', design: 'phoenix' },
+];
+/** The very first client of a fresh game is a softball. */
+const TUTORIAL_CLIENT: CustomerOptions = { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' };
 const BEST_KEY = 'cheeky-business:best-day';
 /** Where customers stand while waiting off-screen, and how fast they waddle. */
 const OFFSTAGE_X = 7.5;
@@ -42,6 +52,9 @@ let pointerDown = false;
 
 const state = {
   phase: 'title' as Phase,
+  /** Demo Day mode: scripted 3-client run. */
+  demo: false,
+  clientsToday: CLIENTS_PER_DAY,
   day: 1,
   clientIndex: 0,
   cash: 0,
@@ -66,7 +79,48 @@ const state = {
   walkX: -OFFSTAGE_X,
   walkTarget: -OFFSTAGE_X,
   onArrive: null as (() => void) | null,
+  /** 1 = standing, 0 = bent over. */
+  upright: 0,
+  /** 1 = jeans up, 0 = at the knees. */
+  pantsUp: 0,
 };
+
+// ---------- Tiny scripting helpers for cutscene beats (driven by the frame loop) ----------
+interface Tween { t: number; dur: number; tick(k: number): void; resolve(): void }
+const tweens: Tween[] = [];
+function tween(dur: number, tick: (k: number) => void): Promise<void> {
+  return new Promise((resolve) => tweens.push({ t: 0, dur, tick, resolve }));
+}
+const wait = (seconds: number) => tween(seconds, () => {});
+const easeInOut = (k: number) => k * k * (3 - 2 * k);
+/** Ease with a little overshoot at the end, for the bend-over "flop". */
+const easeBack = (k: number) => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+function tweenPose(upright: number, pantsUp: number, dur: number, ease = easeInOut): Promise<void> {
+  const u0 = state.upright;
+  const p0 = state.pantsUp;
+  return tween(dur, (k) => {
+    const e = ease(k);
+    state.upright = u0 + (upright - u0) * e;
+    state.pantsUp = p0 + (pantsUp - p0) * e;
+  });
+}
+function walk(x: number): Promise<void> {
+  return new Promise((resolve) => {
+    state.walkTarget = x;
+    state.onArrive = resolve;
+  });
+}
+function runTweens(dt: number): void {
+  for (let i = tweens.length - 1; i >= 0; i--) {
+    const tw = tweens[i];
+    tw.t = Math.min(tw.dur, tw.t + dt);
+    tw.tick(tw.dur ? tw.t / tw.dur : 1);
+    if (tw.t >= tw.dur) {
+      tweens.splice(i, 1);
+      tw.resolve();
+    }
+  }
+}
 
 // Squirm physics: a damped spring that flinches get added to.
 const flinch = { pos: new THREE.Vector2(), vel: new THREE.Vector2() };
@@ -102,8 +156,8 @@ $('mute-btn').addEventListener('click', (e) => {
 });
 
 function updateTopHud(): void {
-  $('hud-day').textContent = `Day ${state.day}`;
-  $('hud-client').textContent = `Client ${Math.min(state.clientIndex + 1, CLIENTS_PER_DAY)}/${CLIENTS_PER_DAY}`;
+  $('hud-day').textContent = state.demo ? 'Demo Day' : `Day ${state.day}`;
+  $('hud-client').textContent = `Client ${Math.min(state.clientIndex + 1, state.clientsToday)}/${state.clientsToday}`;
   $('hud-cash').textContent = `$${state.cash.toLocaleString()}`;
 }
 
@@ -182,50 +236,72 @@ function showTitle(): void {
   state.phase = 'title';
   $('hud').classList.add('hidden');
   const best = readBest();
-  showModal(
-    `<h1>CHEEKY BUSINESS</h1>
-     <p style="margin-top:8px">A tattoo parlor for one very specific body part. Okay, two.</p>
+  const card = showModal(
+    `<div class="logo-wrap"></div>
+     <p class="tagline">A tattoo parlor for one very specific body part. Okay, two.</p>
      <ul>
-       <li>Clients waddle in, bend over, and ask for a design. Ink it <strong>exactly</strong> as shown.</li>
+       <li>Clients waddle in, drop trou, and ask for a design. Ink it <strong>exactly</strong> as shown.</li>
        <li><strong>Hole Jobs</strong> are close-up and the hole <em>puckers</em>. <strong>Cheek Jobs</strong> go big. <strong>Full Moon</strong> is both.</li>
        <li>Hold the mouse (or a finger) to ink. <strong>1 / 2 / 3</strong> switch needles, <strong>Z</strong> or the scroll wheel zooms.</li>
        <li>They squirm. Pain makes them flinch. Watch their face.</li>
-       <li>You're scored on accuracy (no stray ink) and coverage (finish the design).</li>
        <li>There is no undo. Tattoos are permanent.</li>
      </ul>
      ${best ? `<p>Best single-day earnings: <strong style="color:var(--green)">$${best}</strong></p>` : ''}`,
-    [{ label: 'Open the shop', primary: true, onClick: () => startDay(1) }],
+    [
+      { label: 'Open the shop', onClick: () => startDay(1, false) },
+      { label: 'Demo Day (3 clients)', primary: true, onClick: () => startDay(1, true) },
+    ],
   );
+  const logo = makeLogo();
+  logo.className = 'logo';
+  card.querySelector('.logo-wrap')!.appendChild(logo);
 }
 
-function startDay(day: number): void {
+function startDay(day: number, demo = state.demo): void {
   hideModal();
+  state.demo = demo;
+  state.clientsToday = demo ? DEMO_SCRIPT.length : CLIENTS_PER_DAY;
   state.day = day;
   state.clientIndex = 0;
   state.dayCash = 0;
+  if (day === 1) state.cash = 0;
   state.results = [];
   state.usedDesigns = [];
   state.timeLimit = Math.max(28, 50 - (day - 1) * 5);
   // Whoever is on stage (the title-screen model) waddles off first.
-  walkOff(nextClient);
+  void leave().then(nextClient);
 }
 
-function walkTo(x: number, then: () => void): void {
-  state.walkTarget = x;
-  state.onArrive = then;
-}
-
-function walkOff(then: () => void): void {
-  if (Math.abs(state.walkX) >= OFFSTAGE_X - 0.01) {
-    then();
-    return;
-  }
+/** Current client stands up and waddles off (pants still down, obviously). */
+async function leave(): Promise<void> {
+  if (Math.abs(state.walkX) >= OFFSTAGE_X - 0.01) return;
   state.phase = 'leaving';
-  walkTo(OFFSTAGE_X, then);
+  await tweenPose(1, 0, 0.5);
+  await walk(OFFSTAGE_X);
+}
+
+/** New client waddles in with their pants on, drops them, and bends over the bench. */
+async function arrive(): Promise<void> {
+  const c = state.customer!;
+  state.phase = 'arriving';
+  state.walkX = -OFFSTAGE_X;
+  state.upright = 1;
+  state.pantsUp = 1;
+  await walk(0);
+  await wait(0.35);
+  say(`${c.name}: "${pickLine(ARRIVAL_LINES)}"`, 1400);
+  await wait(0.5);
+  await tweenPose(1, 0, 0.45);
+  await wait(0.35);
+  await tweenPose(0, 0, 0.75, easeBack);
+  await wait(0.2);
 }
 
 function nextClient(): void {
-  const c = makeCustomer(state.day, Math.random, state.usedDesigns);
+  const opts = state.demo
+    ? DEMO_SCRIPT[state.clientIndex]
+    : state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
+  const c = makeCustomer(state.day, Math.random, state.usedDesigns, opts);
   state.customer = c;
   state.usedDesigns.push(c.design.id);
   painter.prepare(c);
@@ -236,9 +312,9 @@ function nextClient(): void {
   updateTopHud();
   $('hud').classList.add('hidden');
 
-  state.phase = 'arriving';
-  state.walkX = -OFFSTAGE_X;
-  walkTo(0, showIntro);
+  if (c.looks.hair !== 'bald') world.hairMaterial.color.set(c.looks.hairColor);
+  world.hair.visible = c.looks.hair !== 'bald';
+  void arrive().then(showIntro);
 }
 
 function showIntro(): void {
@@ -282,10 +358,17 @@ function startInking(): void {
   state.quipTimer = 4;
   state.winkTimer = 2 + Math.random() * 2;
   setZoom(c.job.zoom === 'close' ? 1 : 0);
+  // Fine needle for detail work, Liner for the big pieces.
+  setBrush(c.job.kind === 'hole' ? 0 : 1);
   flinch.pos.set(0, 0);
   flinch.vel.set(0, 0);
   state.phase = 'inking';
-  say(`${c.name}: "Be gentle."`);
+  if (state.day === 1 && state.clientIndex === 0) {
+    say('Trace the design on the card. Hold to ink. Hit Done when finished!', 4500);
+    state.quipTimer = 7;
+  } else {
+    say(`${c.name}: "Be gentle."`);
+  }
 }
 
 function payFor(score: number, c: Customer): number {
@@ -312,12 +395,14 @@ function finishJob(): void {
   state.results.push({ customer: c, score, pay });
   updateTopHud();
 
+  const quote = reactionFor(score.score, c);
+  const lastOfDay = state.clientIndex + 1 >= state.clientsToday;
   const card = showModal(
     `<div class="client" style="gap:14px">
        ${portraitHtml('res-portrait', 64)}
        <h2 style="margin:0">${escapeHtml(c.name)} checks the mirror…</h2>
      </div>
-     <div class="quote">"${escapeHtml(reactionFor(score.score, c))}"</div>
+     <div class="quote">"${escapeHtml(quote)}"</div>
      <div class="compare">
        <figure><canvas id="res-ink" width="260" height="260"></canvas>Your work</figure>
        <figure><canvas id="res-overlay" width="260" height="260"></canvas>vs. the request</figure>
@@ -331,15 +416,30 @@ function finishJob(): void {
          <dt>Paid</dt><dd style="color:${pay ? 'var(--green)' : 'var(--red)'}">${pay ? `$${pay}` : 'Refused to pay'}</dd>
        </dl>
      </div>`,
-    [{
-      label: state.clientIndex + 1 >= CLIENTS_PER_DAY ? 'Close up shop' : 'Next client',
-      primary: true,
-      onClick: () => {
-        hideModal();
-        state.clientIndex++;
-        walkOff(state.clientIndex >= CLIENTS_PER_DAY ? endDay : nextClient);
+    [
+      {
+        label: '📸 Share',
+        onClick: () => {
+          const big = painter.snapshot(c.job, 450);
+          const overlay = document.createElement('canvas');
+          overlay.width = overlay.height = 450;
+          drawReferenceCard(overlay, c, painter.outline, big);
+          const cardImg = buildShareCard({ customer: c, score, quote, yourWork: big, overlay });
+          shareCard(cardImg, c.name)
+            .then((how) => { if (how === 'downloaded') say('Saved! Check your downloads.', 1800); })
+            .catch(() => say("Couldn't save the picture on this device.", 2000));
+        },
       },
-    }],
+      {
+        label: lastOfDay ? (state.demo ? 'Finish demo' : 'Close up shop') : 'Next client',
+        primary: true,
+        onClick: () => {
+          hideModal();
+          state.clientIndex++;
+          void leave().then(state.clientIndex >= state.clientsToday ? endDay : nextClient);
+        },
+      },
+    ],
   );
   drawPortrait(card.querySelector<HTMLCanvasElement>('#res-portrait')!, c.looks, moodForScore(score.score));
   const snap = painter.snapshot(c.job, 260);
@@ -351,10 +451,24 @@ function endDay(): void {
   state.phase = 'dayEnd';
   $('hud').classList.add('hidden');
   const avg = Math.round(state.results.reduce((s, r) => s + r.score.score, 0) / state.results.length);
+  const reviews = state.results.map((r) => `<li>${escapeHtml(reviewFor(r.score.score, r.customer))}</li>`).join('');
+  if (state.demo) {
+    showModal(
+      `<h2>Demo complete!</h2>
+       <p>You earned <strong style="color:var(--green)">$${state.dayCash}</strong> · average likeness <strong>${avg}%</strong></p>
+       <p style="margin-bottom:0">Your reviews:</p>
+       <ul class="reviews">${reviews}</ul>
+       <p style="font-size:13px">The full game runs five clients a day, and every day they get squirmier.</p>`,
+      [
+        { label: 'Back to title', onClick: showTitle },
+        { label: 'Play the full game', primary: true, onClick: () => startDay(1, false) },
+      ],
+    );
+    return;
+  }
   const best = readBest();
   const record = state.dayCash > best;
   if (record) writeBest(state.dayCash);
-  const reviews = state.results.map((r) => `<li>${escapeHtml(reviewFor(r.score.score, r.customer))}</li>`).join('');
   showModal(
     `<h2>Day ${state.day} complete</h2>
      <p>Earned <strong style="color:var(--green)">$${state.dayCash}</strong> today · average likeness <strong>${avg}%</strong>
@@ -425,6 +539,10 @@ const PAIN_QUIPS = [
   ['MOMMY.', 'WHY IS IT VIBRATING', "I can see colors that don't exist", 'I regret EVERYTHING'],
 ];
 const FLINCH_LINES = ['OW!', 'YEOWCH!', 'SWEET MOTHER OF—', '*involuntary clench*', 'NOT THE HOLE!'];
+const ARRIVAL_LINES = ['*unbuckles*', 'Okay. Okay okay okay.', "Don't look. I mean, do. That's the job.", 'Here goes nothing.', 'Pants? Where we\'re going we don\'t need pants.'];
+function pickLine(lines: string[]): string {
+  return lines[Math.floor(Math.random() * lines.length)];
+}
 const WINK_LINES = ['*wink*', '*pucker*', 'Sorry, it does that.', "It's nervous. We're both nervous."];
 
 const tmpNormal = new THREE.Vector3();
@@ -440,6 +558,9 @@ function frame(dt: number): void {
   const c = state.customer;
   const inking = state.phase === 'inking';
   const t = elapsed;
+
+  runTweens(dt);
+  world.setPose(state.upright, state.pantsUp);
 
   // ---- Waddle: walk toward the target with swinging legs and a hip bob.
   const dx = state.walkTarget - state.walkX;
@@ -459,7 +580,10 @@ function frame(dt: number): void {
 
   // ---- Squirm: idle sway + pain jitter + flinch spring.
   const squirm = c ? c.squirm : 0.2;
-  const amp = inking ? 0.008 + squirm * 0.035 + state.pain * 0.045 : 0.006;
+  // Hole work is fiddly enough already; clients hold stiller for it (tuned so a typical
+  // squirm stays within about one line-width at hole scale).
+  const holdStill = c?.job.kind === 'hole' ? 0.5 : 1;
+  const amp = inking ? (0.008 + squirm * 0.035 + state.pain * 0.04) * holdStill : 0.006;
   const k = 90;
   const damping = 9;
   flinch.vel.x += (-k * flinch.pos.x - damping * flinch.vel.x) * dt;
@@ -500,8 +624,10 @@ function frame(dt: number): void {
   // ---- Camera zoom (FOV only; see scene.ts on why the camera never moves).
   state.zoom += (state.zoomTarget - state.zoom) * Math.min(1, dt * 6);
   const ez = state.zoom * state.zoom * (3 - 2 * state.zoom);
-  world.setFov(THREE.MathUtils.lerp(ZOOM.wide.fov, ZOOM.close.fov, ez));
-  lookTarget.lerpVectors(ZOOM.wide.target, ZOOM.close.target, ez);
+  // Pull back to show the whole client while they're standing.
+  const stand = easeInOut(Math.min(1, state.upright));
+  world.setFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(ZOOM.wide.fov, ZOOM.close.fov, ez), ZOOM.entrance.fov, stand));
+  lookTarget.lerpVectors(ZOOM.wide.target, ZOOM.close.target, ez).lerp(ZOOM.entrance.target, stand);
   world.camera.position.set(CAMERA_POS.x + Math.sin(elapsed * 0.25) * 0.05 * (1 - ez), CAMERA_POS.y, CAMERA_POS.z);
   world.camera.lookAt(lookTarget);
   world.camera.updateMatrixWorld();
@@ -547,7 +673,7 @@ function frame(dt: number): void {
     if (buzzing) {
       const centerDist = hit && hit.uv ? Math.hypot(hit.uv.x - 0.5, hit.uv.y - 0.5) : 1;
       const nearHole = centerDist < 0.05 ? 1.5 : 1;
-      state.pain = Math.min(1, state.pain + dt * c.sensitivity * 0.3 * nearHole);
+      state.pain = Math.min(1, state.pain + dt * c.sensitivity * 0.22 * nearHole);
     } else {
       state.pain = Math.max(0, state.pain - dt * 0.22);
     }
@@ -558,6 +684,10 @@ function frame(dt: number): void {
       state.pain = 0.55;
       state.flinchCooldown = 1.5;
       state.clench = 1;
+      // The jolt knocks the gun off the skin: it interrupts the stroke instead of
+      // dragging a streak across the design. Press again to keep going.
+      pointerDown = false;
+      painter.lift();
       audio.yelp();
       say(FLINCH_LINES[Math.floor(Math.random() * FLINCH_LINES.length)], 1200);
     }
@@ -576,6 +706,7 @@ function frame(dt: number): void {
     $('time-bar').style.width = `${Math.max(0, (state.timeLeft / total) * 100)}%`;
     $('time-text').textContent = String(Math.max(0, Math.ceil(state.timeLeft)));
     $('pain-bar').style.width = `${state.pain * 100}%`;
+    $('pain-bar').parentElement!.classList.toggle('danger', state.pain > 0.68);
     if (state.timeLeft <= 0) {
       say('Time! Put the gun down.', 1500);
       finishJob();
@@ -600,6 +731,7 @@ painter.prepare(state.customer);
 for (const m of world.skinMaterials) m.color.set(state.customer.skin);
 world.shirtMaterial.color.set(state.customer.looks.shirt);
 state.walkX = state.walkTarget = 0;
+world.hairMaterial.color.set(state.customer.looks.hairColor);
 showTitle();
 requestAnimationFrame(loop);
 

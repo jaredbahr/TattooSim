@@ -8,7 +8,7 @@
  * Method: tolerant precision/recall.
  *   - precision = share of the player's ink that lands within `tolerance` cells of the design
  *   - recall    = share of the design that has player ink within `tolerance` cells
- *   - accuracy  = F1 of the two, curved slightly downward so half a design can't pass as a B
+ *   - accuracy  = F1 of the two, curved downward so sloppy work can't pass as a B
  * Precision punishes scribbling everywhere; recall punishes drawing only half the design.
  */
 
@@ -99,7 +99,8 @@ export function scoreMasks(
   const precision = inkHits / inkCount;
   const recall = targetHits / targetCount;
   const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
-  // Slight downward curve: near-perfect work stays near 100, half-finished work drops to a C.
-  const score = Math.round(100 * Math.pow(f1, 1.2));
+  // Downward curve: near-perfect work stays near 100, but sloppy or half-finished work
+  // falls off fast (F1 0.92 → 88, 0.75 → 63, 0.55 → 38). Tuned with a simulated player.
+  const score = Math.round(100 * Math.pow(f1, 1.6));
   return { precision, recall, score, grade: gradeFor(score) };
 }
