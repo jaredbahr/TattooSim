@@ -6,9 +6,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    # Pages only accepts deploys from the repo's default branch. Until the default branch
-    # is switched to main, the working branch (currently the default) deploys too.
-    branches: [main, ccr-6508e43f-x7fi60]
+    # Pages only accepts deploys from the default branch (main). Feature work reaches the
+    # live site by merging into main.
+    branches: [main]
   workflow_dispatch:
 
 permissions:
