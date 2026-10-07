@@ -14,6 +14,7 @@ import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
 import { aside, nextSideGag, type SideGag } from './humor';
+import { frontPage } from './newspaper';
 
 const CLIENTS_PER_DAY = 5;
 /** The very first client of a fresh game is a softball. */
@@ -29,6 +30,8 @@ interface JobResult {
   customer: Customer;
   score: ScoreBreakdown;
   pay: number;
+  /** Square crop of the finished skin, for the newspaper photo. */
+  snap: HTMLCanvasElement;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -430,7 +433,7 @@ function finishJob(): void {
   const pay = payFor(score.score, c);
   state.cash += pay;
   state.dayCash += pay;
-  state.results.push({ customer: c, score, pay });
+  state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
   updateTopHud();
 
   const quote = reactionFor(score.score, c);
@@ -494,8 +497,33 @@ function endDay(): void {
   const best = readBest();
   const record = state.dayCash > best;
   if (record) writeBest(state.dayCash);
-  showModal(
-    `<h2>Day ${state.day} complete</h2>
+  // The paper covers the day's worst job (or the best, if even the worst was great).
+  const worst = state.results.reduce((w, r) => (r.score.score < w.score.score ? r : w));
+  const featured = worst.score.score >= 80
+    ? state.results.reduce((b, r) => (r.score.score > b.score.score ? r : b))
+    : worst;
+  const paper = frontPage({
+    clientName: featured.customer.name,
+    sex: featured.customer.sex,
+    designName: featured.customer.design.name,
+    score: featured.score.score,
+  });
+  const card = showModal(
+    `<div class="paper">
+       <div class="masthead">THE DAILY CHEEK</div>
+       <div class="dateline">Day ${state.day} · Late edition · 25¢ (or one warm quarter)</div>
+       <div class="headline">${escapeHtml(paper.headline)}</div>
+       <div class="paper-body">
+         <figure><canvas id="paper-photo" width="200" height="200"></canvas>
+           <figcaption>${escapeHtml(featured.customer.name)}'s ${escapeHtml(featured.customer.design.name.toLowerCase())}, as photographed by a witness.</figcaption></figure>
+         <div class="paper-col">
+           <p class="subhead">${escapeHtml(paper.subhead)}</p>
+           <p class="brief">${escapeHtml(paper.sidebar)}</p>
+           <p class="brief classified">${escapeHtml(paper.classified)}</p>
+         </div>
+       </div>
+     </div>
+     <h2>Day ${state.day} complete</h2>
      <p>Earned <strong style="color:var(--green)">$${state.dayCash}</strong> today · average likeness <strong>${avg}%</strong>
      ${record ? ' · <strong style="color:var(--yellow)">New record!</strong>' : ''}</p>
      <p style="margin-bottom:0">Your online reviews:</p>
@@ -507,6 +535,7 @@ function endDay(): void {
       { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
     ],
   );
+  card.querySelector<HTMLCanvasElement>('#paper-photo')!.getContext('2d')!.drawImage(featured.snap, 0, 0);
 }
 
 // ---------- Input ----------
