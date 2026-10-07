@@ -1,161 +1,198 @@
 # Cheeky Business
 
-A PS1-style 3D tattoo-parlor sim for one very specific body part. Okay, two.
-Clients waddle in with their pants around their knees, bend over, and ask for a tattoo
-on the butt, on the butthole, or both. You ink it freehand while they squirm, and you're
-judged on how much your work actually looks like what they asked for.
+**Behind every great tattoo is a great behind.**
 
-Built with **Three.js + TypeScript + Vite**. Runs in any modern browser, desktop or mobile.
+A PS1-style 3D tattoo-parlor sim for one very specific body part. Okay, two. Clients waddle
+in, drop their pants, bend over the bench, and ask for a tattoo on the butt, on the
+butthole, or both. You ink it freehand while they squirm, and you're judged on how much
+your work actually looks like what they asked for. There is no undo.
 
-## Play it from GitHub
+**▶ Play it: https://jaredbahr.github.io/TattooSim/** (desktop or phone, nothing to install)
 
-`.github/workflows/deploy.yml` builds and publishes the game to GitHub Pages on every push
-to `main`. One-time setup: **Settings → Pages → Source: GitHub Actions**. The game then
-lives at `https://<owner>.github.io/<repo>/`.
+Built with Three.js + TypeScript + Vite. Every texture, sign, face and sound is generated
+in code: there are no image or audio files.
 
-## Modes
-
-- **Play**: five random clients a day, with each day squirmier and shorter on time. The very first client is always an easy one.
-
-After any job, **📸 Share** makes a 1080×1350 result card (your work vs. the request, grade, client quote). On phones it opens the share sheet; on desktop it downloads.
-
-## Job types
-
-| Job | Camera | Designs | Twist |
-|---|---|---|---|
-| **Hole Job** | Close-up | Small, built around the hole: Bird's-Eye View, Tribal Sun, Smooch, Bullseye, Donut… | The hole **puckers and winks**, dragging your linework with it |
-| **Cheek Job** | Wide | Big pieces: Bald Eagle, Sailor Swallows, Tribal Tramp Stamp, Angel Wings, Big Heart | Coverage, filled tribal, squirming |
-| **Full Moon** | Wide, zoom for detail | Phoenix Rising, Eye of the Tribe, Full Moon | Both at once. Pays 1.7× |
-
-## Run it
-
-```bash
-npm install
-npm run dev        # http://localhost:5173
-npm test           # scoring unit tests
-npm run build      # typecheck + production build to dist/
-```
+---
 
 ## How to play
 
 | Input | Action |
 |---|---|
-| Hold left mouse / finger | Ink |
-| `1` `2` `3` | Fine / Liner / Shader needle |
-| `Z` or scroll wheel | Zoom in / out |
-| Two-finger drag / right-drag | Pan the view |
-| Pinch | Zoom |
-| `Space` or `Enter` | Done inking |
-| `M` | Mute the gun buzz |
+| Hold mouse / one finger | Ink |
+| `1` `2` `3` | Fine / Liner / Shader needle (picked for you per job) |
+| `Z`, scroll wheel, or pinch | Zoom in / out |
+| Two-finger drag, or right/middle-drag | Pan the view |
+| `Space` / `Enter` | Done inking |
+| `M` | Mute |
 
-- Each day has **5 clients**. Each one wants a Hole Job, a Cheek Job, or (more often on later days) a Full Moon.
-- **They squirm.** Every client has a trait (Ticklish, Nervous winker, Too much coffee, Ex-Marine...) that sets their wiggle, pucker rate, pain sensitivity and tipping.
-- **Watch their face.** The pixel portrait sweats, winces and cries as pain builds.
-- **Pain builds while you ink**, and faster near the... center. Max it out and they flinch hard. Ease off to let it fade.
+- **Copy the card.** Each client shows a reference design. Ink it as exactly as you can.
+- **They squirm.** Every client has a trait (Ticklish, Nervous winker, Too much coffee,
+  Ex-Marine…) that sets how much they wiggle, how fast pain builds, and how well they tip.
+- **Watch their face.** Pain builds while you ink, faster near the… center. The pixel
+  portrait sweats, winces and cries, and the pain bar pulses before a flinch. A flinch
+  knocks your gun off the skin, so ease off.
 - **No undo.** Tattoos are permanent. That's the whole thing.
-- Later days give you less time and more caffeinated clients.
+
+## A day at the shop
+
+Five clients a day. Each day gets squirmier and shorter on time. The very first client of a
+new game is always an easy one.
+
+| Job | Camera | Designs | The catch |
+|---|---|---|---|
+| **Hole Job** | Close-up | 13 small designs built around the hole: Bullseye, Donut, Bird's-Eye View (the hole is the eye), Tribal Sun, Smooch, YOLO (the hole is the O)… | The hole **puckers and winks**, and it drags your linework with it |
+| **Cheek Job** | Wide | 10 big pieces: Bald Eagle, Sailor Swallows, Tribal Tramp Stamp, Angel Wings, and text tattoos (EXIT ONLY with an arrow, NO RAGRETS, LOVE / HATE, BUTT, MOM) | Coverage, solid fills, squirming |
+| **Full Moon** | Wide, zoom for detail | Phoenix Rising, Eye of the Tribe, Full Moon | Cheeks *and* hole. Pays 1.7× |
+
+**Twists** (any day):
+- **Surprise me** (~10%): no design, just a "?". Draw anything; you're graded on vibes.
+- **Mind-changer** (~12%): halfway through, "Actually… make it a heart." The card swaps.
+  Ink on the old design is forgiven, but you still have to cover the new one.
+- **Side gags**: sneezes, hiccups and leg cramps jolt the client, and farts make them clench.
+  Phone calls make them squirm. Plus small talk.
+
+**From day 2:**
+- **Cover-ups.** Botch a job (under 60%) and that client may come back days later with
+  *your actual bad tattoo* still on them. Over 35% means "fix it": the same design, with your
+  old ink still there. Under 35% means a solid Blackout Heart over the crime scene. They pay
+  1.5× hazard pay.
+- **Couples** (~18% of mid-day jobs): two clients side by side want matching tattoos. Each is
+  scored on its own, then on how well the two match. The one who got the worse tattoo will
+  say so, by name.
+- **Bosses** (usually the last client, 2× pay):
+  - **Big Brad** flexes without warning. His rear swells and your gun gets knocked off.
+  - **Grandma Ruth** never stops talking. Her stories pop up right over your work.
+  - **Kaylee** films everything. Camera flashes white out the screen.
+
+**End of the day:**
+- **The Daily Cheek**: a newspaper front page about your worst job (or your best, on a great day),
+  with a "witness photo" of the actual tattoo.
+- **Reviews** from every client, in Yelp style.
+- **Supply Shop**: spend your earnings on one-time upgrades for the run.
+
+| Upgrade | Price | Effect |
+|---|---|---|
+| 🧴 Numbing Cream | $150 | Pain builds 35% slower |
+| 🪢 Bench Strap | $220 | Clients squirm 35% less |
+| ☕ Espresso Machine | $180 | +8 seconds per client |
+| 🟪 Stencil Transfer | $350 | Faint purple guide of the design on the skin (never scored) |
+| 🍩 Donut Cushion | $90 | Clients tip 15% more |
+
+After any job, **📸 Share** makes a 1080×1350 picture of your work vs. the request, with the grade
+and the client's reaction. It opens the share sheet on phones and downloads on desktop.
 
 ## How scoring works
 
 `src/scoring.ts` is pure, DOM-free and unit-tested.
 
-1. The reference design is rasterized into the same UV canvas space the player paints in, at the job's scale.
-   Tolerance is about 0.6 of a line-width; the score curve is `F1^1.6`. Both were tuned with a simulated player (see below).
-2. Ink and design are both reduced to 128×128 binary masks over the job's crop square (tight for Hole Jobs, wide for Cheek/Full Moon). Ink outside the crop counts as stray.
-3. **Accuracy (precision)**: how much of your ink lands within about one line-width of the design. This catches scribbling and flooding.
-4. **Coverage (recall)**: how much of the design has ink within that tolerance. This catches half-finished work.
-5. **Likeness** = F1 of the two, curved downward (`f1^1.6`). Grades run S / A / B / C / D / F. Under 30% means the client refuses to pay.
+1. The reference design is drawn into the same skin-canvas space you paint in, at the job's scale.
+2. Your ink and the design are reduced to 128×128 masks over the job's area. Ink outside that
+   area counts as stray.
+3. **Accuracy** (precision): how much of your ink lands near the design. This catches scribbling.
+4. **Coverage** (recall): how much of the design you inked. This catches half-finished work.
+5. **Likeness** = F1 of the two, curved to `F1^1.6` so sloppy work drops fast. "Near" means about
+   0.6 of a line-width.
 
-### Tuning baseline (simulated player; Big Heart, Bird's-Eye View, Phoenix Rising)
+Grades run S (92+), A, B, C, D, F. Under 30%, the client refuses to pay. Couples average the
+two scores, then scale by how well they match. Mind-changers pass the old design as a
+"forgiven" mask, so its ink doesn't count against accuracy.
+
+**Tuning baseline** (a simulated player tracing the real designs with a wobbly hand):
 
 | Hand | Big Heart (cheek) | Bird's-Eye View (hole) | Phoenix Rising (moon) |
 |---|---|---|---|
-| Steady (±0.5 line-width wobble) | 88% A | 95% S | 70% B |
-| Sloppy (±1.3 line-width wobble) | 71% B | 86% A | 62% C |
+| Steady (±0.5 line-width) | 88% A | 95% S | 70% B |
+| Sloppy (±1.3 line-width) | 71% B | 86% A | 62% C |
 
-The simulator runs on a software GPU at a few FPS, so client squirm and winks barely act during its strokes. Real play at 60 FPS is harder, especially Hole Jobs.
+The simulator ran on a software GPU at a few frames per second, so squirming and winks barely
+acted during its strokes. Real play at 60 FPS is harder, especially Hole Jobs.
+
+## Humor house rules
+
+All jokes live in `src/humor.ts` (plus reactions and reviews in `src/customers.ts`). Every
+list is a shuffle bag: each line plays once before any repeat, and never twice in a row.
+When adding jokes:
+
+- **Deadpan and butt-forward.** Bad taste is the point. Mean-spirited is not.
+- **A running gag shows up once, not everywhere.** The "Bathroom was clean though" bit lives in
+  a single review; a test keeps it out of the UI lists.
+- **Only people have feelings.** No objects or body parts with thoughts or emotions.
+- **Keep each list at 5+ lines** (a test enforces it) so frequent players keep seeing new ones.
+
+## Run it locally
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm test           # unit tests (vitest)
+npm run build      # typecheck + production build to dist/
+```
+
+## Deploying
+
+`.github/workflows/deploy.yml` runs the tests, builds, and publishes to GitHub Pages on every
+push to `main` (the default branch). Changes go live by merging into `main`; it takes about a minute.
+One-time setup was **Settings → Pages → Source: GitHub Actions**.
 
 ## Architecture
 
 ```
 src/
-  main.ts       state machine (title → arriving → intro → inking → result → leaving → dayEnd), input, sim
-  scene.ts      parlor, customer rig (heightfield rear, hole pucker, swinging legs), gun, camera zoom
-  ps1.ts        two-pass renderer: low-res dithered world + crisp skin/ink layer
-  painter.ts    layered skin canvas (pixelated base / irritation / crisp ink), silhouette cut, masks
-  designs.ts    tattoo design library; one draw()/fill() feeds both the reference card and the score mask
-  jobs.ts       Hole / Cheek / Full Moon job specs (scale, zoom, tolerance, pay)
-  customers.ts  customer generation, traits, reactions, Yelp-style reviews
-  portrait.ts   procedural 32×32 pixel-art faces with live moods
-  logo.ts       bitmap-font pixel logo + butt mascot
-  share.ts      1080×1350 share card, Web Share API with download fallback
-  humor.ts      all joke pools (shuffle bags: no repeats until a pool runs out), side gags
-  newspaper.ts  The Daily Cheek front page generator
-  strokefont.ts single-stroke letters for traceable text tattoos
-  upgrades.ts   supply-shop upgrades and their effects
-  scoring.ts    tolerant precision/recall scoring (pure)
-  audio.ts      procedural tattoo-gun buzz + yelp (WebAudio, no assets)
-tests/
-  scoring.test.ts
+  main.ts        state machine (title → arriving → intro → inking → result → leaving → dayEnd → shop),
+                 input and gestures, per-frame sim, bosses, twists, cover-ups, couples
+  scene.ts       parlor, posters, camera; buildRig() makes a client body (two for couples)
+  ps1.ts         two-pass renderer: low-res dithered world + crisp skin/ink layer
+  painter.ts     skin canvas layers (pixelated base / stencil / irritation / crisp ink), masks
+  designs.ts     design library; one draw()/fill() feeds the reference card and the score mask
+  strokefont.ts  single-stroke letters for traceable text tattoos
+  jobs.ts        Hole / Cheek / Full Moon specs (scale, zoom, tolerance, pay)
+  customers.ts   client generation, traits, twists, bosses, couples, cover-ups, reactions, reviews
+  portrait.ts    procedural 32×32 pixel-art faces with live moods
+  humor.ts       joke pools (shuffle bags) and mid-tattoo side gags
+  newspaper.ts   The Daily Cheek front-page generator
+  upgrades.ts    supply-shop upgrades and their effects
+  scoring.ts     tolerant precision/recall scoring (pure)
+  share.ts       share card (Web Share API, download fallback)
+  logo.ts        bitmap-font pixel logo + mascot
+  audio.ts       procedural gun buzz + retro button beeps (WebAudio)
+tests/           scoring, customers, humor, newspaper, upgrades
 ```
 
 Design decisions worth knowing:
 
-- **Planar UVs on a displaced plane.** The rear is a 220×220 plane displaced by `cheekHeight()`. Its UVs stay planar, so the scoring canvas and the visible surface share one coordinate space.
-- **Near head-on camera with a long lens** (`CAMERA_POS` in `scene.ts`). A steep camera angle parallax-warps strokes drawn across the crease: a screen-space circle came out heart-shaped in UV space and scored unfairly. Zoom changes only the FOV for the same reason.
-- **Two-pass PS1 look** (`ps1.ts`). The world renders at ~270 px tall with vertex snapping and a Bayer-dithered palette. The skin and gun render crisp on top, so anything that should appear *in front of* the skin must also be on `HI_RES_LAYER`.
-- **The pucker is real geometry.** `setPucker()` pulls vertices near the hole inward. UVs don't move, so ink drawn mid-wink stretches when it relaxes.
-- **Silhouette via alpha cut.** The plane is cut to a rear-shaped outline (`silhouettePath()` in `painter.ts`) with `alphaTest`. Raycast hits outside the outline are ignored.
-- **Zero binary assets.** Every texture, sign, poster and sound is generated at runtime.
+- **Planar UVs on a displaced plane.** The rear is a 220×220 plane shaped by `cheekHeight()`. Its
+  UVs stay flat, so the scoring canvas and the visible skin share one coordinate space.
+- **The camera never tilts.** A steep angle warps strokes drawn across the crease (a circle
+  came out heart-shaped and scored unfairly). Zoom only changes the field of view, and pan slides
+  the camera and its target together.
+- **Two-pass PS1 look.** The world renders at ~270 px tall with vertex snapping and a dithered
+  palette. The skin and gun render crisp on top, so anything that should appear in front of the
+  skin must be on `HI_RES_LAYER`.
+- **The pucker is real geometry.** `setPucker()` pulls vertices near the hole inward while the UVs
+  stay put, so ink drawn mid-wink stretches when it relaxes.
+- **Debug hook.** `window.__cheeky` exposes game state for automated playthroughs.
+  `state.forceNext = 'couple' | 'boss'` forces the next client type.
 
 ## Roadmap
 
-**Phase 1: MVP**
-- [x] 3D parlor, customer rig, tattoo gun that follows the surface
-- [x] Randomized clients with traits, squirm, pain and flinch
-- [x] Tolerant precision/recall scoring with a unit test suite
-- [x] Results screen (your work vs. overlay), day loop, reviews, best-day record
-- [x] Mobile layout and touch input
+**Done:** PS1 look · three job types, 27 designs incl. text tattoos · pucker, squirm, pain and
+flinch · walk-in / pants-drop / bend-over cutscene · women clients and body types · pixel
+portraits · share card · supply shop · cover-ups · The Daily Cheek · surprise-me and
+mind-changers · side gags · bosses · couples · two-finger pan and pinch zoom · button beeps
 
-**Phase 1.5: Cheeky Business**
-- [x] PS1 pixel look, pixel-art portraits with live moods
-- [x] Hole / Cheek / Full Moon jobs, 20 designs incl. birds and tribal
-- [x] Puckering, winking hole; zoom
-- [x] Waddle-in / waddle-out
-- [x] GitHub Pages deploy
-
-**Phase 1.6: Demo-ready**
-- [x] Walk-in, pants drop, bend-over cutscene; stand up and waddle out
-- [x] Bolder hole that reads in the wide shot
-- [x] Pixel logo title screen
-- [x] Easy first client (tutorial); Demo Day mode later removed in favor of just playing
-- [x] Share card
-- [x] Humor pass: deadpan asides on every screen
-- [x] Women clients (names, portraits, 3D hairstyles) and body-type variety for everyone
-- [x] Difficulty pass: tighter scoring, flinch interrupts instead of streaking, slower pain, hole clients hold stiller, auto needle per job
-
-**Phase 2: Depth**
-- [x] Supply shop between days: Numbing Cream, Bench Strap, Espresso Machine, Stencil Transfer, Donut Cushion
-- [x] Cover-ups: botched clients (<60%) come back with your actual ink; fix it, or a Blackout Heart if <35%
-- [x] The Daily Cheek: end-of-day newspaper about your worst (or best) job
-- [x] "Surprise me" clients (no reference; graded on vibes) and mind-changers (design swaps mid-job; old ink forgiven)
-- [x] Two-finger pan / pinch zoom (right/middle-drag pans on desktop)
-- [ ] Ink colors and fill/shading designs (score per color channel)
-- [ ] Reputation meter that gates harder, better-paying clients
-
-**Phase 3: Juice**
-- [ ] Hand-mirror reveal cinematic and reaction faces
-- [x] Retro button beeps (gun buzz + beeps is the whole soundtrack, on purpose)
-- [x] Replay variety: shuffle-bag joke pools (no repeats until exhausted), random mid-tattoo side gags, more posters
-
-**Phase 4: Content**
-- [x] Text tattoos in a single-stroke font: EXIT ONLY, NO RAGRETS, LOVE/HATE, BUTT, MOM, YOLO
-- [x] Bosses (last client, day 2+): Big Brad flexes, Grandma Ruth never stops talking, Kaylee flashes the camera
-- [x] Couples: two clients side by side, scored on each and on how well they match
-- [ ] Daily seeded challenge
+**Ideas for later:**
+- [ ] Ink colors (scored per color)
+- [ ] Reputation meter that unlocks harder, better-paying clients
+- [ ] Hand-mirror reveal cinematic
+- [ ] Daily seeded challenge (everyone gets the same clients)
+- [ ] Phone layout that keeps the wall posters readable
 
 ## Known limitations
 
-- Three.js ships as one ~565 kB chunk (~145 kB gzipped). Fine for a single-page game.
-- On narrow phones the customer renders fairly small. The camera FOV scales with aspect, but a dedicated portrait framing would help.
-- Shadows plus a 1024² canvas texture re-uploaded while inking is fine on real GPUs, but slow under software rendering.
+- **Phones:** the client renders fairly small on narrow screens, and the wall posters get cut
+  off at the edges. Pinch and pan help.
+- **Desktop:** while you're inking, the right-hand posters sit partly behind the side panel.
+- **Difficulty:** tuning so far comes from a simulated player, so real-speed balance for bosses
+  and couples still needs human playtesting.
+- **Bundle size:** Three.js ships as one ~570 kB chunk (~150 kB gzipped). That's fine for a
+  single-page game.
