@@ -26,6 +26,8 @@ export interface Design {
   fill?(ctx: CanvasRenderingContext2D): void;
   /** Custom walk-in request (text tattoos read badly through the generic "Make it a {d}"). */
   request?: string;
+  /** Only used by special jobs (e.g. cover-ups); never picked at random. */
+  special?: boolean;
 }
 
 type Pt = [number, number];
@@ -432,5 +434,21 @@ export function renderDesign(
 }
 
 export function designsFor(job: JobKind): Design[] {
-  return DESIGNS.filter((d) => d.job === job);
+  return DESIGNS.filter((d) => d.job === job && !d.special);
+}
+
+/** Cover-up for a botched job: one big solid heart over the whole area. */
+export const BLACKOUT: Design = {
+  id: 'blackout', name: 'Blackout Heart', job: 'cheek', special: true,
+  tip: 'Fill the whole heart solid. Cover your crimes. Use the big needle.',
+  draw(ctx) { heartPath(ctx, 1.05, 0.05); },
+  fill(ctx) { heartPath(ctx, 1.05, 0.05); },
+};
+
+function heartPath(ctx: CanvasRenderingContext2D, k: number, dy: number): void {
+  ctx.moveTo(0, 0.6 * k + dy);
+  ctx.bezierCurveTo(-0.6 * k, 0.25 * k + dy, -1.15 * k, -0.15 * k + dy, -0.95 * k, -0.6 * k + dy);
+  ctx.bezierCurveTo(-0.78 * k, -1.05 * k + dy, -0.18 * k, -1.05 * k + dy, 0, -0.6 * k + dy);
+  ctx.bezierCurveTo(0.18 * k, -1.05 * k + dy, 0.78 * k, -1.05 * k + dy, 0.95 * k, -0.6 * k + dy);
+  ctx.bezierCurveTo(1.15 * k, -0.15 * k + dy, 0.6 * k, 0.25 * k + dy, 0, 0.6 * k + dy);
 }

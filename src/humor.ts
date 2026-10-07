@@ -183,6 +183,31 @@ export const HUMOR = {
     'A blank canvas. I already HAD a blank canvas.',
     "I've never felt so seen. Or so un-inked.",
   ],
+  /** Returning cover-up clients, walking in. */
+  returnArrival: [
+    'Remember me?',
+    'We need to talk about what you did.',
+    'My doctor sent me back. He was very specific.',
+    "I've been sitting on this for a while. Painfully.",
+    'Hi. Again. Unfortunately.',
+    'You might not recognize my face. You will recognize the rest.',
+  ],
+  /** "Fix it" requests. {d} = the original design. */
+  returnFix: [
+    'You did this. Fix it. It was supposed to be a {d}.',
+    'This was a {d}. Allegedly. Make it a {d}.',
+    "My family thinks it's a rash. It's a {d}. Make it look like one.",
+    "I'm giving you one more chance. {D}. Like we agreed.",
+    'Finish the {d}. I am begging you.',
+  ],
+  /** Blackout requests: the old one was beyond saving. */
+  returnBlackout: [
+    'Just black it out. Big solid heart. Erase the past.',
+    'I need it gone. Make it one big black heart. Fill every inch.',
+    "My lawyer says 'cover it.' A solid heart. Now.",
+    'There is no fixing that. Paint it black. Heart-shaped.',
+    "I can't look at it anymore. Neither can anyone else. Solid heart.",
+  ],
 } as const;
 
 export type HumorKind = keyof typeof HUMOR;

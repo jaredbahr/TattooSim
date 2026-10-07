@@ -1,7 +1,7 @@
 /**
  * Customer generation: who waddles in, what they want, and how badly they'll squirm.
  */
-import { designsFor, type Design } from './designs';
+import { BLACKOUT, designsFor, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
 import { randomLooks, type Looks, type Sex } from './portrait';
 import { ShuffleBag, aside } from './humor';
@@ -35,6 +35,39 @@ export interface Customer {
   mindChange?: Design;
   /** Set once they've changed their mind: what they originally asked for. */
   originalDesign?: Design;
+  /** A returning client you botched: fix the old design, or black it out. */
+  coverUp?: 'fix' | 'blackout';
+}
+
+/** A botched job, remembered so the client can come back for a cover-up. */
+export interface Regret {
+  customer: Customer;
+  score: number;
+  ink: HTMLCanvasElement;
+  snap: HTMLCanvasElement;
+}
+
+/** The same client, back with your old ink: fix it (35–59%) or black it out (<35%). */
+export function makeReturningCustomer(r: Regret): Customer {
+  const old = r.customer;
+  const blackout = r.score < 35;
+  const design = blackout ? BLACKOUT : old.originalDesign ?? old.design;
+  const d = design.name.toLowerCase();
+  const line = aside(blackout ? 'returnBlackout' : 'returnFix')
+    .replaceAll('{d}', d)
+    .replaceAll('{D}', d.charAt(0).toUpperCase() + d.slice(1));
+  return {
+    ...old,
+    job: blackout ? JOBS.cheek : old.job,
+    design,
+    request: line,
+    trait: `Returning customer · ${old.trait}`,
+    generosity: old.generosity * 1.5,
+    surprise: undefined,
+    mindChange: undefined,
+    originalDesign: undefined,
+    coverUp: blackout ? 'blackout' : 'fix',
+  };
 }
 
 /** Placeholder design for "surprise me" clients: nothing to trace. */
@@ -52,7 +85,7 @@ const NAMES: Record<Sex, string[]> = {
   m: ['Gary', 'Big Steve', 'Doug', 'Kyle', 'Chad', 'Randy', 'Earl', 'Todd', 'Vince', 'Duane', 'Lance', 'Rusty', 'Moose', 'Dale'],
   f: ['Brenda', 'Tammy', 'Linda', 'Deb', 'Crystal', 'Marge', 'Becky', 'Pam', 'Sheila', 'Gloria', 'Darlene', 'Rhonda', 'Trish', 'Jolene', 'Bev', 'Doreen'],
 };
-/** Words that change with the client: {ex} = their ex, {partner}, {party}. */
+/** Words that change with the client: {ex} = pronoun for their ex (her/him), {partner}, {party}. */
 const WORDS: Record<Sex, Record<string, string>> = {
   m: { ex: 'her', partner: 'wife', party: 'Bachelor party' },
   f: { ex: 'him', partner: 'husband', party: 'Bachelorette party' },
@@ -198,7 +231,7 @@ export function makeCustomer(
   };
 }
 
-/** Mirror reactions by grade tier. Tokens: {d} design, {partner}, {ex}. */
+/** Mirror reactions by grade tier. Tokens: {d} design, {partner}. */
 const REACTIONS: Record<'S' | 'A' | 'B' | 'C' | 'D' | 'F', string[]> = {
   S: [
     "*sobbing* It's the most beautiful {d} I've ever had back there.",
@@ -246,7 +279,7 @@ const REACTIONS: Record<'S' | 'A' | 'B' | 'C' | 'D' | 'F', string[]> = {
     'There is nothing back there but regret and ink.',
     "I'm going to need you to sign this NDA.",
     'Is this... is this a hate crime?',
-    "My {ex} was right about me. And about you.",
+    'My ex was right about me. And about you.',
   ],
 };
 
@@ -307,7 +340,7 @@ const REVIEWS: string[][] = [
     '"I cried. My {partner} cried. Perfect."',
     '"Best thing to ever happen back there. And I\'ve had a colonoscopy."',
     '"10/10. Would moon again."',
-    '"My {ex} saw it at the beach and wept. Worth every penny."',
+    '"My ex saw it at the beach and wept. Worth every penny."',
   ],
 ];
 

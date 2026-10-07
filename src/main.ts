@@ -6,7 +6,10 @@
 import * as THREE from 'three';
 import { buildWorld, CAMERA_POS, HI_RES_LAYER, ZOOM } from './scene';
 import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor } from './painter';
-import { makeCustomer, reactionFor, reviewFor, type Customer, type CustomerOptions } from './customers';
+import {
+  makeCustomer, makeReturningCustomer, reactionFor, reviewFor,
+  type Customer, type CustomerOptions, type Regret,
+} from './customers';
 import { makeLogo } from './logo';
 import { DESIGNS } from './designs';
 import { buildShareCard, shareCard } from './share';
@@ -57,6 +60,12 @@ const state = {
   clientsToday: CLIENTS_PER_DAY,
   /** Shop upgrades owned this run. */
   upgrades: new Set<UpgradeId>(),
+  /** Botched jobs that may come back for a cover-up. */
+  regrets: [] as Regret[],
+  /** At most one returning client per day. */
+  returnedToday: false,
+  /** "Before" photo of the current cover-up client's old work. */
+  coverUpSnap: null as HTMLCanvasElement | null,
   day: 1,
   clientIndex: 0,
   cash: 0,
@@ -305,9 +314,11 @@ function startDay(day: number): void {
   if (day === 1) {
     state.cash = 0;
     state.upgrades.clear();
+    state.regrets = [];
   }
   state.results = [];
   state.usedDesigns = [];
+  state.returnedToday = false;
   state.timeLimit = Math.max(28, 50 - (day - 1) * 5);
   // Whoever is on stage (the title-screen model) waddles off first.
   void leave().then(nextClient);
@@ -330,7 +341,7 @@ async function arrive(): Promise<void> {
   state.pantsUp = 1;
   await walk(0);
   await wait(0.35);
-  say(`${c.name}: "${aside('arrival')}"`, 1400);
+  say(`${c.name}: "${aside(c.coverUp ? 'returnArrival' : 'arrival')}"`, 1600);
   await wait(0.5);
   await tweenPose(1, 0, 0.45);
   await wait(0.35);
@@ -340,13 +351,27 @@ async function arrive(): Promise<void> {
 
 function nextClient(): void {
   const opts = state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
-  const c = makeCustomer(state.day, Math.random, state.usedDesigns, {
-    ...opts,
-    avoidNames: state.results.map((r) => r.customer.name),
-  });
+  const todaysNames = state.results.map((r) => r.customer.name);
+  // From day 2, one botched client a day may come back for a cover-up.
+  const regretIdx = state.regrets.findIndex((r) => !todaysNames.includes(r.customer.name));
+  const returning = state.day >= 2 && !state.returnedToday && state.clientIndex >= 1 && state.clientIndex <= 3
+    && regretIdx >= 0 && Math.random() < 0.5;
+  let regret: Regret | null = null;
+  let c: Customer;
+  if (returning) {
+    regret = state.regrets.splice(regretIdx, 1)[0];
+    c = makeReturningCustomer(regret);
+    state.returnedToday = true;
+  } else {
+    // New clients never share a name with someone who might come back for a cover-up.
+    const avoidNames = [...todaysNames, ...state.regrets.map((r) => r.customer.name)];
+    c = makeCustomer(state.day, Math.random, state.usedDesigns, { ...opts, avoidNames });
+  }
   state.customer = c;
+  state.coverUpSnap = regret?.snap ?? null;
   state.usedDesigns.push(c.design.id);
   painter.prepare(c);
+  if (regret) painter.loadInk(regret.ink);
   for (const m of world.skinMaterials) m.color.set(c.skin);
   world.shirtMaterial.color.set(c.looks.shirt);
   state.zoom = state.zoomTarget = 0;
@@ -365,10 +390,12 @@ function showIntro(): void {
     `<div class="client" style="gap:14px">
        ${portraitHtml('intro-portrait', 80)}
        <div><h2>${escapeHtml(c.name)}</h2><div class="trait">${escapeHtml(c.trait)}</div>
-       <div class="job-tag job-${c.job.kind}">${escapeHtml(c.job.label)}</div></div>
+       <div class="job-tag job-${c.job.kind}">${escapeHtml(c.job.label)}</div>
+       ${c.coverUp ? '<div class="job-tag job-cover">COVER-UP · 1.5× PAY</div>' : ''}</div>
      </div>
      <div class="quote">"${escapeHtml(c.request)}"</div>
      <div style="display:flex;gap:14px;align-items:center">
+       ${state.coverUpSnap ? '<figure class="before"><canvas id="intro-before" width="200" height="200"></canvas>Current situation</figure>' : ''}
        <canvas id="intro-ref" width="200" height="200" style="width:150px;border-radius:10px;border:3px solid #fff"></canvas>
        <p style="margin:0"><strong>${c.surprise ? 'Surprise me.' : escapeHtml(c.design.name) + '.'}</strong> ${escapeHtml(c.design.tip)}<br/><br/>
        ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus + effectsOf(state.upgrades).bonusSeconds}s</strong>.
@@ -378,6 +405,7 @@ function showIntro(): void {
   );
   drawPortrait(card.querySelector<HTMLCanvasElement>('#intro-portrait')!, c.looks, 'nervous');
   drawCard(card.querySelector<HTMLCanvasElement>('#intro-ref')!, c);
+  if (state.coverUpSnap) card.querySelector<HTMLCanvasElement>('#intro-before')!.getContext('2d')!.drawImage(state.coverUpSnap, 0, 0);
 }
 
 function startInking(): void {
@@ -412,7 +440,7 @@ function startInking(): void {
   setZoom(c.job.zoom === 'close' ? 1 : 0);
   state.pan.set(0, 0);
   // Fine needle for detail work, Liner for the big pieces.
-  setBrush(c.job.kind === 'hole' ? 0 : 1);
+  setBrush(c.coverUp === 'blackout' ? 2 : c.job.kind === 'hole' ? 0 : 1);
   flinch.pos.set(0, 0);
   flinch.vel.set(0, 0);
   state.phase = 'inking';
@@ -505,6 +533,9 @@ function finishJob(): void {
   state.cash += pay;
   state.dayCash += pay;
   state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
+  if (!c.surprise && !c.coverUp && score.score < 60) {
+    state.regrets.push({ customer: c, score: score.score, ink: painter.exportInk(), snap: painter.snapshot(c.job, 200) });
+  }
   updateTopHud();
 
   const quote = !c.surprise

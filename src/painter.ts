@@ -318,6 +318,19 @@ export class SkinPainter {
    * The player's ink as a GRID×GRID mask over the job's crop square, plus how much ink
    * (in grid cells) landed outside the crop where it can only count against them.
    */
+  /** Copy of the ink layer, kept so a botched client can come back with it. */
+  exportInk(): HTMLCanvasElement {
+    const [c, ctx] = makeCanvas();
+    ctx.drawImage(this.ink.canvas, 0, 0);
+    return c;
+  }
+
+  /** Start this client's skin with existing ink (a returning cover-up client). */
+  loadInk(src: HTMLCanvasElement): void {
+    this.ink.drawImage(src, 0, 0);
+    this.dirty = true;
+  }
+
   inkMask(job: JobSpec): { mask: Uint8Array; stray: number } {
     const mask = toMask(this.ink.canvas, job.cropHalf);
     // Stray ink: sample the whole canvas coarsely and count samples outside the crop.

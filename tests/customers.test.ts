@@ -18,6 +18,17 @@ describe('makeCustomer', () => {
   });
 });
 
+describe('pronoun tokens', () => {
+  it('never produce "my him" / "my her"', async () => {
+    const { reactionFor } = await import('../src/customers');
+    for (let i = 0; i < 300; i++) {
+      const c = makeCustomer(1, Math.random, [], { sex: i % 2 ? 'f' : 'm' });
+      const lines = [reactionFor(Math.random() * 100, c), reviewFor(Math.random() * 100, c), c.request];
+      for (const l of lines) expect(l).not.toMatch(/\bmy (him|her)\b/i);
+    }
+  });
+});
+
 describe('reviewFor', () => {
   it("doesn't repeat a joke within one summary", () => {
     const c = makeCustomer(1);
