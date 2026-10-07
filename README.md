@@ -89,7 +89,10 @@ src/
   portrait.ts   procedural 32×32 pixel-art faces with live moods
   logo.ts       bitmap-font pixel logo + butt mascot
   share.ts      1080×1350 share card, Web Share API with download fallback
-  humor.ts      deadpan asides ("Bathroom was clean though") used across the UI
+  humor.ts      all joke pools (shuffle bags: no repeats until a pool runs out), side gags
+  newspaper.ts  The Daily Cheek front page generator
+  strokefont.ts single-stroke letters for traceable text tattoos
+  upgrades.ts   supply-shop upgrades and their effects
   scoring.ts    tolerant precision/recall scoring (pure)
   audio.ts      procedural tattoo-gun buzz + yelp (WebAudio, no assets)
 tests/
@@ -132,10 +135,13 @@ Design decisions worth knowing:
 - [x] Difficulty pass: tighter scoring, flinch interrupts instead of streaking, slower pain, hole clients hold stiller, auto needle per job
 
 **Phase 2: Depth**
+- [x] Supply shop between days: Numbing Cream, Bench Strap, Espresso Machine, Stencil Transfer, Donut Cushion
+- [x] Cover-ups: botched clients (<60%) come back with your actual ink; fix it, or a Blackout Heart if <35%
+- [x] The Daily Cheek: end-of-day newspaper about your worst (or best) job
+- [x] "Surprise me" clients (no reference; graded on vibes) and mind-changers (design swaps mid-job; old ink forgiven)
+- [x] Two-finger pan / pinch zoom (right/middle-drag pans on desktop)
 - [ ] Ink colors and fill/shading designs (score per color channel)
-- [ ] Shop upgrades: steadier hands, numbing cream (slows pain), stencil transfer (faint guide on the skin)
 - [ ] Reputation meter that gates harder, better-paying clients
-- [ ] Stencil-free "freestyle" requests judged by a looser shape metric (e.g. Hu moments)
 
 **Phase 3: Juice**
 - [ ] Hand-mirror reveal cinematic and reaction faces
@@ -143,8 +149,9 @@ Design decisions worth knowing:
 - [x] Replay variety: shuffle-bag joke pools (no repeats until exhausted), random mid-tattoo side gags, more posters
 
 **Phase 4: Content**
-- [ ] Text tattoos ("MOM", "EXIT ONLY") with glyph-aware scoring
-- [ ] Boss clients (the Bodybuilder who clenches on a timer, the Grandma who talks the whole time)
+- [x] Text tattoos in a single-stroke font: EXIT ONLY, NO RAGRETS, LOVE/HATE, BUTT, MOM, YOLO
+- [x] Bosses (last client, day 2+): Big Brad flexes, Grandma Ruth never stops talking, Kaylee flashes the camera
+- [x] Couples: two clients side by side, scored on each and on how well they match
 - [ ] Daily seeded challenge
 
 ## Known limitations
