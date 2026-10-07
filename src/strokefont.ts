@@ -25,7 +25,6 @@ const GLYPHS: Record<string, Stroke[]> = {
   Y: [[[0, 0], [2, 3], [4, 0]], [[2, 3], [2, 6]]],
 };
 
-export const SUPPORTED = new Set(Object.keys(GLYPHS));
 
 /** Horizontal advance per character, as a fraction of the letter height. */
 const ADVANCE = 4 / 6 + 0.28;

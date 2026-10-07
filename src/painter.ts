@@ -98,8 +98,6 @@ export class SkinPainter {
   private readonly outside: HTMLCanvasElement;
   private dirty = true;
   private last: { x: number; y: number } | null = null;
-  /** Total stamp count this session; used as a cheap "has the player done anything" check. */
-  stamps = 0;
 
   constructor() {
     const [compCanvas, comp] = makeCanvas();
@@ -234,7 +232,6 @@ export class SkinPainter {
     this.ink.clearRect(0, 0, S, S);
     this.stencil.clearRect(0, 0, S, S);
     this.last = null;
-    this.stamps = 0;
     this.dirty = true;
   }
 
@@ -294,7 +291,6 @@ export class SkinPainter {
     ink.beginPath();
     ink.arc(x, y, radius, 0, Math.PI * 2);
     ink.fill();
-    this.stamps++;
     this.dirty = true;
   }
 

@@ -155,7 +155,7 @@ src/
   share.ts       share card (Web Share API, download fallback)
   logo.ts        bitmap-font pixel logo + mascot
   audio.ts       procedural gun buzz + retro button beeps (WebAudio)
-tests/           scoring, customers, humor, newspaper, upgrades
+tests/           scoring, customers, designs (dialogue grammar), humor, newspaper, upgrades
 ```
 
 Design decisions worth knowing:

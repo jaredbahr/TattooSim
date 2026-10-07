@@ -194,15 +194,6 @@ kbd {
   animation: rise 0.25s ease-out;
 }
 @keyframes rise { from { transform: translateY(16px); opacity: 0; } }
-.card h1 {
-  margin: 0;
-  font-size: clamp(40px, 9vw, 64px);
-  font-family: Impact, 'Arial Black', sans-serif;
-  letter-spacing: 0.03em;
-  color: var(--pink);
-  text-shadow: 0 0 24px rgba(255, 63, 164, 0.6);
-  line-height: 1;
-}
 .card h2 { margin: 0 0 6px; font-size: 26px; }
 .logo-wrap { text-align: center; }
 .logo {

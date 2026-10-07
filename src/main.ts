@@ -11,7 +11,7 @@ import {
   type Customer, type CustomerOptions, type Regret,
 } from './customers';
 import { makeLogo } from './logo';
-import { DESIGNS } from './designs';
+import { DESIGNS, fillDesign } from './designs';
 import { buildShareCard, shareCard } from './share';
 import { countOn, gradeFor, scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
@@ -60,6 +60,9 @@ raycaster.layers.set(HI_RES_LAYER);
 const pointer = new THREE.Vector2(0, 0);
 let pointerInside = false;
 let pointerDown = false;
+// A finger waits a beat before inking, so the first finger of a pinch or pan leaves no dot.
+let inkReadyAt = 0;
+const TOUCH_INK_DELAY_MS = 80;
 
 const state = {
   phase: 'title' as Phase,
@@ -213,6 +216,10 @@ function setMood(mood: Mood): void {
 }
 
 let bubbleTimeout = 0;
+/** Who's talking: one name, even when a couple is on the bench. */
+function speaker(c: Customer): string {
+  return c.name.split(' & ')[0];
+}
 function say(text: string, ms = 1800): void {
   const b = $('bubble');
   b.textContent = text;
@@ -355,7 +362,7 @@ async function arrive(): Promise<void> {
   state.pantsUp = 1;
   await walk(0);
   await wait(0.35);
-  say(`${c.name}: "${aside(c.coverUp ? 'returnArrival' : 'arrival')}"`, 1600);
+  say(`${speaker(c)}: "${aside(c.coverUp ? 'returnArrival' : 'arrival')}"`, 1600);
   await wait(0.5);
   await tweenPose(1, 0, 0.45);
   await wait(0.35);
@@ -365,7 +372,8 @@ async function arrive(): Promise<void> {
 
 function nextClient(): void {
   const opts = state.day === 1 && state.clientIndex === 0 ? TUTORIAL_CLIENT : {};
-  const todaysNames = state.results.map((r) => r.customer.name);
+  // Couples are stored as "A & B"; split them so neither name repeats today.
+  const todaysNames = state.results.flatMap((r) => r.customer.name.split(' & '));
   // From day 2, one botched client a day may come back for a cover-up.
   const regretIdx = state.regrets.findIndex((r) => !todaysNames.includes(r.customer.name));
   const returning = state.day >= 2 && !state.returnedToday && state.clientIndex >= 1 && state.clientIndex <= 3
@@ -464,7 +472,6 @@ function startInking(): void {
   $('fine-print').textContent = aside('hudFinePrint');
   drawCard($<HTMLCanvasElement>('ref-card'), c);
 
-  state.timeLimit = Math.max(28, 50 - (state.day - 1) * 5);
   const fx = effectsOf(state.upgrades);
   state.timeLeft = state.timeLimit + c.job.timeBonus + fx.bonusSeconds;
   painter.setStencil(fx.stencil ? c : null);
@@ -494,7 +501,7 @@ function startInking(): void {
     say('Trace the design on the card. Hold to ink. Hit Done when finished!', 4500);
     state.quipTimer = 7;
   } else {
-    say(`${c.name}: "${aside('start')}"`);
+    say(`${speaker(c)}: "${aside('start')}"`);
   }
 }
 
@@ -505,7 +512,7 @@ function playSideGag(gag: SideGag): void {
     window.setTimeout(() => {
       if (state.phase !== 'inking' || state.customer !== c) return;
       const isSound = line.startsWith('*') || line.startsWith('💨');
-      say(isSound ? line : `${c.name}: "${line}"`, 1500);
+      say(isSound ? line : `${speaker(c)}: "${line}"`, 1500);
       // A fart clenches on the sound itself; everything else lands on the punchline.
       const hitAt = gag.effect === 'clench' ? 0 : gag.lines.length - 1;
       if (i !== hitAt) return;
@@ -533,7 +540,7 @@ function bossAct(): void {
     pointerDown = false; // the flex knocks the gun off
     liftPens();
     flinch.vel.y += 1.2;
-    say(`${c.name}: "${aside('bossFlex')}"`, 1300);
+    say(`${speaker(c)}: "${aside('bossFlex')}"`, 1300);
     state.bossTimer = 3.2 + Math.random() * 2;
   } else if (c.boss === 'grandma') {
     const el = document.createElement('div');
@@ -550,7 +557,7 @@ function bossAct(): void {
     f.classList.remove('pop');
     void f.offsetWidth;
     f.classList.add('pop');
-    say(`${c.name}: "${aside('bossInfluencer')}"`, 1600);
+    say(`${speaker(c)}: "${aside('bossInfluencer')}"`, 1600);
     state.bossTimer = 3.5 + Math.random() * 2.5;
   }
 }
@@ -562,11 +569,8 @@ function changeMind(): void {
   c.originalDesign = c.design;
   c.design = c.mindChange;
   c.mindChange = undefined;
-  const d = c.design.name;
-  const line = aside('mindChange')
-    .replaceAll('{d}', d.toLowerCase())
-    .replaceAll('{D}', d.charAt(0).toUpperCase() + d.slice(1));
-  say(`${c.name}: "${line}"`, 2600);
+  const line = fillDesign(aside('mindChange'), c.design);
+  say(`${speaker(c)}: "${line}"`, 2600);
   $('ref-name').textContent = `${c.design.name} · ${c.job.label}`;
   $('ref-tip').textContent = 'They changed their mind. The old one stays on, of course.';
   drawCard($<HTMLCanvasElement>('ref-card'), c);
@@ -631,9 +635,12 @@ function finishJob(): void {
   const pay = payFor(score.score, c);
   state.cash += pay;
   state.dayCash += pay;
-  state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
+  const thumb = painter.snapshot(c.job, 200);
+  state.results.push({ customer: c, score, pay, snap: thumb });
   if (!c.surprise && !c.coverUp && !c.boss && !c.partner && score.score < 60) {
-    state.regrets.push({ customer: c, score: score.score, ink: painter.exportInk(), snap: painter.snapshot(c.job, 200) });
+    state.regrets.push({ customer: c, score: score.score, ink: painter.exportInk(), snap: thumb });
+    // Each regret holds a full-size ink copy; keep only the freshest few so long runs stay light.
+    if (state.regrets.length > 3) state.regrets.shift();
   }
   updateTopHud();
 
@@ -691,6 +698,7 @@ function finishJob(): void {
         label: lastOfDay ? 'Close up shop' : 'Next client',
         primary: true,
         onClick: () => {
+          if (state.phase !== 'result') return;
           hideModal();
           state.clientIndex++;
           void leave().then(state.clientIndex >= state.clientsToday ? endDay : nextClient);
@@ -727,6 +735,7 @@ function endDay(): void {
   const paper = frontPage({
     clientName: featured.customer.name,
     sex: featured.customer.sex,
+    couple: !!featured.customer.partner,
     designName: featured.customer.design.name,
     score: featured.score.score,
   });
@@ -844,6 +853,7 @@ canvasEl.addEventListener('pointerdown', (e) => {
   }
   updatePointer(e);
   pointerDown = true;
+  inkReadyAt = e.pointerType === 'touch' ? performance.now() + TOUCH_INK_DELAY_MS : 0;
   liftPens();
 });
 canvasEl.addEventListener('pointermove', (e) => {
@@ -856,6 +866,7 @@ canvasEl.addEventListener('pointermove', (e) => {
         const z = THREE.MathUtils.clamp(state.zoomTarget + Math.log(g.dist / gesture.dist) * 1.4, 0, 1);
         state.zoomTarget = z;
         state.zoom = z;
+        $('zoom-btn').innerHTML = `${z > 0.5 ? '🔭 Zoom out' : '🔍 Zoom in'}<kbd>Z</kbd>`;
       }
     }
     gesture = g;
@@ -886,7 +897,11 @@ canvasEl.addEventListener('wheel', (e) => {
   e.preventDefault();
   if ((e.deltaY < 0) !== (state.zoomTarget > 0.5)) toggleZoom();
 }, { passive: false });
-window.addEventListener('blur', () => release());
+window.addEventListener('blur', () => {
+  // A lost pointerup must never leave a stale gesture that blocks inking.
+  touches.clear();
+  release();
+});
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'm' || e.key === 'M') $('mute-btn').click();
@@ -1038,12 +1053,11 @@ function frame(dt: number): void {
   const skin = hit && hit.object === world.partner.canvasMesh ? partnerPainter : painter;
   if (skin !== activeSkin) {
     liftPens();
-    partnerPainter.lift();
     activeSkin = skin;
   }
   // The plane is alpha-cut to a silhouette; hits on the invisible part don't count.
   if (hit && !(hit.uv && skin.isOnSkin(hit.uv))) hit = undefined;
-  const buzzing = inking && pointerDown && !!hit;
+  const buzzing = inking && pointerDown && !!hit && performance.now() >= inkReadyAt;
   audio.setBuzzing(buzzing);
   world.gun.visible = inking && pointerInside;
   // Keep the gun the same size on screen regardless of zoom.
@@ -1098,7 +1112,7 @@ function frame(dt: number): void {
     state.quipTimer -= dt;
     if (state.quipTimer <= 0) {
       const tier = state.pain < 0.35 ? 'painLow' : state.pain < 0.7 ? 'painMid' : 'painHigh';
-      say(`${c.name}: "${aside(tier)}"`);
+      say(`${speaker(c)}: "${aside(tier)}"`);
       state.quipTimer = 5 + Math.random() * 4;
     }
 
@@ -1121,8 +1135,8 @@ function frame(dt: number): void {
     $('pain-bar').style.width = `${state.pain * 100}%`;
     $('pain-bar').parentElement!.classList.toggle('danger', state.pain > 0.68);
     if (state.timeLeft <= 0) {
-      say('Time! Put the gun down.', 1500);
       finishJob();
+      say('Time! Put the gun down.', 1500);
     }
   }
 

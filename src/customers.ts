@@ -1,7 +1,7 @@
 /**
  * Customer generation: who waddles in, what they want, and how badly they'll squirm.
  */
-import { BLACKOUT, designsFor, type Design } from './designs';
+import { BLACKOUT, designsFor, fillDesign, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
 import { randomLooks, type Looks, type Sex } from './portrait';
 import { ShuffleBag, aside } from './humor';
@@ -55,11 +55,10 @@ export function makeCouple(day: number, rand: () => number = Math.random, avoidN
     sex: rand() < 0.75 ? (a.sex === 'f' ? 'm' : 'f') : a.sex,
     avoidNames: [...avoidNames, a.name],
   });
-  const d = a.design.name.toLowerCase();
   return {
     ...a,
     name: `${a.name} & ${b.name}`,
-    request: aside('coupleRequest').replaceAll('{d}', d),
+    request: fillDesign(aside('coupleRequest'), a.design),
     trait: 'Couple · matching tattoos',
     generosity: a.generosity * 1.4,
     partner: b,
@@ -119,11 +118,9 @@ export interface Regret {
 export function makeReturningCustomer(r: Regret): Customer {
   const old = r.customer;
   const blackout = r.score < 35;
-  const design = blackout ? BLACKOUT : old.originalDesign ?? old.design;
-  const d = design.name.toLowerCase();
-  const line = aside(blackout ? 'returnBlackout' : 'returnFix')
-    .replaceAll('{d}', d)
-    .replaceAll('{D}', d.charAt(0).toUpperCase() + d.slice(1));
+  // A mind-changer comes back about the design they ended up with (the one the ink was for).
+  const design = blackout ? BLACKOUT : old.design;
+  const line = fillDesign(aside(blackout ? 'returnBlackout' : 'returnFix'), design);
   return {
     ...old,
     job: blackout ? JOBS.cheek : old.job,
@@ -218,9 +215,7 @@ function pick<T>(arr: readonly T[], rand: () => number): T {
 }
 
 function fillTemplate(t: string, design: Design, sex: Sex): string {
-  const lower = design.name.toLowerCase();
-  const upper = design.name.charAt(0).toUpperCase() + design.name.slice(1);
-  let out = t.replaceAll('{d}', lower).replaceAll('{D}', upper);
+  let out = fillDesign(t, design);
   for (const [k, v] of Object.entries(WORDS[sex])) out = out.replaceAll(`{${k}}`, v);
   return out;
 }
@@ -362,7 +357,7 @@ function nextFrom(map: Map<string, ShuffleBag<string>>, key: string, pool: reado
 }
 
 function fillTokens(t: string, c: Customer): string {
-  let out = t.replaceAll('{d}', c.design.name.toLowerCase());
+  let out = fillDesign(t, c.design);
   for (const [k, v] of Object.entries(WORDS[c.sex])) out = out.replaceAll(`{${k}}`, v);
   return out;
 }
