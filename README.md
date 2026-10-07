@@ -43,6 +43,8 @@ npm run build      # typecheck + production build to dist/
 | Hold left mouse / finger | Ink |
 | `1` `2` `3` | Fine / Liner / Shader needle |
 | `Z` or scroll wheel | Zoom in / out |
+| Two-finger drag / right-drag | Pan the view |
+| Pinch | Zoom |
 | `Space` or `Enter` | Done inking |
 | `M` | Mute the gun buzz |
 

@@ -83,7 +83,12 @@ const state = {
   upright: 0,
   /** 1 = jeans up, 0 = at the knees. */
   pantsUp: 0,
+  /** Camera pan (world units). Slides the camera and its target together so the view
+   * angle, and therefore the stroke-to-score mapping, never changes. */
+  pan: new THREE.Vector2(),
 };
+const PAN_LIMIT = { x: 1.6, yMin: -1.6, yMax: 1.3 };
+const CAMERA_DIST = 7.2;
 
 // ---------- Tiny scripting helpers for cutscene beats (driven by the frame loop) ----------
 interface Tween { t: number; dur: number; tick(k: number): void; resolve(): void }
@@ -372,6 +377,7 @@ function startInking(): void {
   state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
   state.squirmBoost = 0;
   setZoom(c.job.zoom === 'close' ? 1 : 0);
+  state.pan.set(0, 0);
   // Fine needle for detail work, Liner for the big pieces.
   setBrush(c.job.kind === 'hole' ? 0 : 1);
   flinch.pos.set(0, 0);
@@ -545,15 +551,75 @@ function updatePointer(e: PointerEvent): void {
   pointerInside = true;
 }
 const canvasEl = world.renderer.domElement;
-canvasEl.addEventListener('pointermove', updatePointer);
+
+// Gestures: two fingers pan (drag) and zoom (pinch); on desktop, right or middle drag pans.
+// While a gesture is active, nothing gets inked, even when one finger lifts first.
+const touches = new Map<number, { x: number; y: number }>();
+let gesture: { mid: { x: number; y: number }; dist: number } | null = null;
+let mousePan: { x: number; y: number } | null = null;
+
+function touchGeometry(): { mid: { x: number; y: number }; dist: number } {
+  const [a, b] = [...touches.values()];
+  return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) };
+}
+
+/** Pan by a screen-space delta (px), so the skin follows your fingers. */
+function panBy(dx: number, dy: number): void {
+  const worldPerPx = (2 * CAMERA_DIST * Math.tan(THREE.MathUtils.degToRad(world.camera.fov) / 2)) / canvasEl.clientHeight;
+  state.pan.x = THREE.MathUtils.clamp(state.pan.x - dx * worldPerPx, -PAN_LIMIT.x, PAN_LIMIT.x);
+  state.pan.y = THREE.MathUtils.clamp(state.pan.y + dy * worldPerPx, PAN_LIMIT.yMin, PAN_LIMIT.yMax);
+}
+
+canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
 canvasEl.addEventListener('pointerdown', (e) => {
   audio.unlock();
-  updatePointer(e);
   canvasEl.setPointerCapture(e.pointerId);
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size >= 2) {
+      // Second finger down: cancel any stroke the first finger started and switch to gesture.
+      pointerDown = false;
+      painter.lift();
+      gesture = touchGeometry();
+      return;
+    }
+  }
+  if (gesture) return;
+  if (e.button === 1 || e.button === 2) {
+    mousePan = { x: e.clientX, y: e.clientY };
+    return;
+  }
+  updatePointer(e);
   pointerDown = true;
   painter.lift();
 });
-const release = () => {
+canvasEl.addEventListener('pointermove', (e) => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gesture && touches.size >= 2) {
+    const g = touchGeometry();
+    if (state.phase === 'inking') {
+      panBy(g.mid.x - gesture.mid.x, g.mid.y - gesture.mid.y);
+      if (gesture.dist > 0 && g.dist > 0) {
+        const z = THREE.MathUtils.clamp(state.zoomTarget + Math.log(g.dist / gesture.dist) * 1.4, 0, 1);
+        state.zoomTarget = z;
+        state.zoom = z;
+      }
+    }
+    gesture = g;
+    return;
+  }
+  if (gesture) return;
+  if (mousePan) {
+    if (state.phase === 'inking') panBy(e.clientX - mousePan.x, e.clientY - mousePan.y);
+    mousePan = { x: e.clientX, y: e.clientY };
+    return;
+  }
+  updatePointer(e);
+});
+const release = (e?: PointerEvent) => {
+  if (e) touches.delete(e.pointerId);
+  if (touches.size === 0) gesture = null;
+  mousePan = null;
   pointerDown = false;
   painter.lift();
 };
@@ -567,7 +633,7 @@ canvasEl.addEventListener('wheel', (e) => {
   e.preventDefault();
   if ((e.deltaY < 0) !== (state.zoomTarget > 0.5)) toggleZoom();
 }, { passive: false });
-window.addEventListener('blur', release);
+window.addEventListener('blur', () => release());
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'm' || e.key === 'M') $('mute-btn').click();
@@ -672,7 +738,14 @@ function frame(dt: number): void {
   const stand = easeInOut(Math.min(1, state.upright));
   world.setFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(ZOOM.wide.fov, ZOOM.close.fov, ez), ZOOM.entrance.fov, stand));
   lookTarget.lerpVectors(ZOOM.wide.target, ZOOM.close.target, ez).lerp(ZOOM.entrance.target, stand);
-  world.camera.position.set(CAMERA_POS.x + Math.sin(elapsed * 0.25) * 0.05 * (1 - ez), CAMERA_POS.y, CAMERA_POS.z);
+  if (!inking) state.pan.multiplyScalar(Math.max(0, 1 - dt * 4));
+  world.camera.position.set(
+    CAMERA_POS.x + state.pan.x + Math.sin(elapsed * 0.25) * 0.05 * (1 - ez),
+    CAMERA_POS.y + state.pan.y,
+    CAMERA_POS.z,
+  );
+  lookTarget.x += state.pan.x;
+  lookTarget.y += state.pan.y;
   world.camera.lookAt(lookTarget);
   world.camera.updateMatrixWorld();
 
