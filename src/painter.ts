@@ -90,6 +90,8 @@ export class SkinPainter {
   private readonly base: CanvasRenderingContext2D;
   private readonly irritation: CanvasRenderingContext2D;
   private readonly ink: CanvasRenderingContext2D;
+  /** Purple stencil guide (Stencil Transfer upgrade). Visual only, never scored. */
+  private readonly stencil: CanvasRenderingContext2D;
   private readonly detail: CanvasRenderingContext2D;
   private readonly silhouette = silhouettePath();
   /** Opaque everywhere except the silhouette; used to cast the rim shadow. */
@@ -105,6 +107,7 @@ export class SkinPainter {
     this.base = makeCanvas()[1];
     this.irritation = makeCanvas()[1];
     this.ink = makeCanvas()[1];
+    this.stencil = makeCanvas()[1];
     this.detail = makeCanvas()[1];
     const [outside, o] = makeCanvas();
     o.fillStyle = '#000';
@@ -229,8 +232,20 @@ export class SkinPainter {
 
     this.irritation.clearRect(0, 0, S, S);
     this.ink.clearRect(0, 0, S, S);
+    this.stencil.clearRect(0, 0, S, S);
     this.last = null;
     this.stamps = 0;
+    this.dirty = true;
+  }
+
+  /** Show (or clear, with null) a faint purple guide of the client's design. */
+  setStencil(c: Customer | null): void {
+    const st = this.stencil;
+    st.clearRect(0, 0, TEX_SIZE, TEX_SIZE);
+    if (c && !c.surprise) {
+      st.strokeStyle = 'rgba(120, 60, 200, 0.45)';
+      renderDesign(st, c.design, TEX_SIZE / 2, TEX_SIZE / 2, c.job.half, c.job.lineWidthPx * 0.6, 'rgba(120, 60, 200, 0.18)');
+    }
     this.dirty = true;
   }
 
@@ -291,6 +306,7 @@ export class SkinPainter {
     c.save();
     c.clip(this.silhouette);
     c.drawImage(this.base.canvas, 0, 0);
+    c.drawImage(this.stencil.canvas, 0, 0);
     c.drawImage(this.irritation.canvas, 0, 0);
     c.drawImage(this.ink.canvas, 0, 0);
     c.restore();

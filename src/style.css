@@ -301,3 +301,13 @@ kbd {
 .paper .classified { font-family: 'Courier New', monospace; font-size: 11px; }
 #ref-card.swapped { animation: swap 0.6s ease-out; }
 @keyframes swap { 0% { transform: rotate(-1.5deg) scale(1.15); box-shadow: 0 0 0 6px var(--yellow); } 100% { transform: rotate(-1.5deg) scale(1); } }
+
+/* ---------- Supply shop ---------- */
+.shop-list { display: grid; gap: 8px; }
+.shop-item { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.03); }
+.shop-item.owned { opacity: 0.6; }
+.shop-icon { font-size: 28px; text-align: center; }
+.shop-text { font-size: 14px; line-height: 1.35; }
+.shop-text div { color: var(--muted); }
+.shop .buy { min-width: 74px; font-weight: bold; color: var(--green); }
+.shop .buy:disabled { color: var(--muted); cursor: default; opacity: 0.7; }

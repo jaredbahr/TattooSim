@@ -16,6 +16,7 @@ import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
 import { aside, nextSideGag, type SideGag } from './humor';
 import { frontPage } from './newspaper';
+import { UPGRADES, effectsOf, type UpgradeId } from './upgrades';
 
 const CLIENTS_PER_DAY = 5;
 /** The very first client of a fresh game is a softball. */
@@ -54,6 +55,8 @@ let pointerDown = false;
 const state = {
   phase: 'title' as Phase,
   clientsToday: CLIENTS_PER_DAY,
+  /** Shop upgrades owned this run. */
+  upgrades: new Set<UpgradeId>(),
   day: 1,
   clientIndex: 0,
   cash: 0,
@@ -64,6 +67,8 @@ const state = {
   brush: 1,
   timeLimit: 45,
   timeLeft: 45,
+  /** Clock for the current job, including bonuses (for the time bar). */
+  timeTotal: 45,
   pain: 0,
   flinchCooldown: 0,
   clench: 0,
@@ -297,7 +302,10 @@ function startDay(day: number): void {
   state.day = day;
   state.clientIndex = 0;
   state.dayCash = 0;
-  if (day === 1) state.cash = 0;
+  if (day === 1) {
+    state.cash = 0;
+    state.upgrades.clear();
+  }
   state.results = [];
   state.usedDesigns = [];
   state.timeLimit = Math.max(28, 50 - (day - 1) * 5);
@@ -363,7 +371,7 @@ function showIntro(): void {
      <div style="display:flex;gap:14px;align-items:center">
        <canvas id="intro-ref" width="200" height="200" style="width:150px;border-radius:10px;border:3px solid #fff"></canvas>
        <p style="margin:0"><strong>${c.surprise ? 'Surprise me.' : escapeHtml(c.design.name) + '.'}</strong> ${escapeHtml(c.design.tip)}<br/><br/>
-       ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus}s</strong>.
+       ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus + effectsOf(state.upgrades).bonusSeconds}s</strong>.
        <span class="small-print">${escapeHtml(aside('introAside'))}</span></p>
      </div>`,
     [{ label: "Let's ink 🖊️", primary: true, onClick: startInking }],
@@ -387,13 +395,16 @@ function startInking(): void {
   drawCard($<HTMLCanvasElement>('ref-card'), c);
 
   state.timeLimit = Math.max(28, 50 - (state.day - 1) * 5);
-  state.timeLeft = state.timeLimit + c.job.timeBonus;
+  const fx = effectsOf(state.upgrades);
+  state.timeLeft = state.timeLimit + c.job.timeBonus + fx.bonusSeconds;
+  painter.setStencil(fx.stencil ? c : null);
   state.pain = 0;
   state.flinchCooldown = 0;
   state.quipTimer = 4;
   state.winkTimer = 2 + Math.random() * 2;
   // Most clients pull one random side gag, somewhere in the middle of the job.
-  const total = state.timeLimit + c.job.timeBonus;
+  const total = state.timeLeft;
+  state.timeTotal = total;
   const tutorial = state.day === 1 && state.clientIndex === 0;
   state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
   state.squirmBoost = 0;
@@ -455,6 +466,7 @@ function changeMind(): void {
   $('ref-name').textContent = `${c.design.name} · ${c.job.label}`;
   $('ref-tip').textContent = 'They changed their mind. The old one stays on, of course.';
   drawCard($<HTMLCanvasElement>('ref-card'), c);
+  if (effectsOf(state.upgrades).stencil) painter.setStencil(c);
   const card = $('ref-card');
   card.classList.remove('swapped');
   void card.offsetWidth;
@@ -464,7 +476,7 @@ function changeMind(): void {
 
 function payFor(score: number, c: Customer): number {
   if (score < 30) return 0;
-  return Math.round((40 + score * 1.6) * c.generosity * c.job.payMult);
+  return Math.round((40 + score * 1.6) * c.generosity * c.job.payMult * effectsOf(state.upgrades).tipMult);
 }
 
 function finishJob(): void {
@@ -597,10 +609,46 @@ function endDay(): void {
      <br/><span class="small-print">Shop notes: ${escapeHtml(aside('shopNotes'))}</span></p>`,
     [
       { label: 'Quit to title', onClick: showTitle },
-      { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
+      { label: 'Visit the supply shop 🛒', primary: true, onClick: showShop },
     ],
   );
   card.querySelector<HTMLCanvasElement>('#paper-photo')!.getContext('2d')!.drawImage(featured.snap, 0, 0);
+}
+
+/** Between-days shop: spend the day's earnings on upgrades. */
+function showShop(): void {
+  const items = UPGRADES.map((u) => {
+    const owned = state.upgrades.has(u.id);
+    const afford = state.cash >= u.price;
+    return `<div class="shop-item ${owned ? 'owned' : ''}">
+        <div class="shop-icon">${u.icon}</div>
+        <div class="shop-text"><strong>${escapeHtml(u.name)}</strong>
+          <div>${escapeHtml(u.effect)}</div><div class="small-print">${escapeHtml(u.blurb)}</div></div>
+        <button class="buy" data-id="${u.id}" ${owned || !afford ? 'disabled' : ''}>
+          ${owned ? 'Owned' : `$${u.price}`}</button>
+      </div>`;
+  }).join('');
+  const card = showModal(
+    `<div class="shop">
+       <h2>🛒 Supply Shop</h2>
+       <p>Cash on hand: <strong style="color:var(--green)">$${state.cash.toLocaleString()}</strong></p>
+       <div class="shop-list">${items}</div>
+     </div>`,
+    [
+      { label: 'Quit to title', onClick: showTitle },
+      { label: `Open Day ${state.day + 1}`, primary: true, onClick: () => startDay(state.day + 1) },
+    ],
+  );
+  card.querySelectorAll<HTMLButtonElement>('button.buy').forEach((b) =>
+    b.addEventListener('click', () => {
+      const u = UPGRADES.find((x) => x.id === b.dataset.id)!;
+      if (state.upgrades.has(u.id) || state.cash < u.price) return;
+      state.cash -= u.price;
+      state.upgrades.add(u.id);
+      updateTopHud();
+      showShop();
+    }),
+  );
 }
 
 // ---------- Input ----------
@@ -751,7 +799,7 @@ function frame(dt: number): void {
   const squirm = (c ? c.squirm : 0.2) + state.squirmBoost;
   // Hole work is fiddly enough already; clients hold stiller for it (tuned so a typical
   // squirm stays within about one line-width at hole scale).
-  const holdStill = c?.job.kind === 'hole' ? 0.5 : 1;
+  const holdStill = (c?.job.kind === 'hole' ? 0.5 : 1) * effectsOf(state.upgrades).squirm;
   const amp = inking ? (0.008 + squirm * 0.035 + state.pain * 0.04) * holdStill : 0.006;
   const k = 90;
   const damping = 9;
@@ -849,7 +897,7 @@ function frame(dt: number): void {
     if (buzzing) {
       const centerDist = hit && hit.uv ? Math.hypot(hit.uv.x - 0.5, hit.uv.y - 0.5) : 1;
       const nearHole = centerDist < 0.05 ? 1.5 : 1;
-      state.pain = Math.min(1, state.pain + dt * c.sensitivity * 0.22 * nearHole);
+      state.pain = Math.min(1, state.pain + dt * c.sensitivity * 0.22 * nearHole * effectsOf(state.upgrades).painRate);
     } else {
       state.pain = Math.max(0, state.pain - dt * 0.22);
     }
@@ -884,7 +932,7 @@ function frame(dt: number): void {
       state.gagAt = -1;
       playSideGag(nextSideGag());
     }
-    const total = state.timeLimit + c.job.timeBonus;
+    const total = state.timeTotal;
     $('time-bar').style.width = `${Math.max(0, (state.timeLeft / total) * 100)}%`;
     $('time-text').textContent = String(Math.max(0, Math.ceil(state.timeLeft)));
     $('pain-bar').style.width = `${state.pain * 100}%`;
