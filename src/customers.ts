@@ -156,7 +156,7 @@ export function makeCustomer(
     looks: randomLooks(skin, sex, rand),
     job: JOBS[kind],
     design,
-    request: fillTemplate(pick(openers, rand), design, sex),
+    request: design.request ?? fillTemplate(pick(openers, rand), design, sex),
     skin,
     hairiness: sex === 'f' ? trait.hair * 0.4 : trait.hair,
     squirm: Math.min(1, trait.squirm + dayPressure),

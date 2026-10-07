@@ -8,6 +8,7 @@ import { buildWorld, CAMERA_POS, HI_RES_LAYER, ZOOM } from './scene';
 import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor } from './painter';
 import { makeCustomer, reactionFor, reviewFor, type Customer, type CustomerOptions } from './customers';
 import { makeLogo } from './logo';
+import { DESIGNS } from './designs';
 import { buildShareCard, shareCard } from './share';
 import { scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
@@ -855,4 +856,4 @@ showTitle();
 requestAnimationFrame(loop);
 
 // Debug/automation hook (used by the screenshot smoke test).
-(window as unknown as { __cheeky: unknown }).__cheeky = { state, painter, world };
+(window as unknown as { __cheeky: unknown }).__cheeky = { state, painter, world, DESIGNS, drawReferenceCard, makeCustomer };
