@@ -90,6 +90,8 @@ export class SkinPainter {
   private readonly base: CanvasRenderingContext2D;
   private readonly irritation: CanvasRenderingContext2D;
   private readonly ink: CanvasRenderingContext2D;
+  /** Purple stencil guide (Stencil Transfer upgrade). Visual only, never scored. */
+  private readonly stencil: CanvasRenderingContext2D;
   private readonly detail: CanvasRenderingContext2D;
   private readonly silhouette = silhouettePath();
   /** Opaque everywhere except the silhouette; used to cast the rim shadow. */
@@ -105,6 +107,7 @@ export class SkinPainter {
     this.base = makeCanvas()[1];
     this.irritation = makeCanvas()[1];
     this.ink = makeCanvas()[1];
+    this.stencil = makeCanvas()[1];
     this.detail = makeCanvas()[1];
     const [outside, o] = makeCanvas();
     o.fillStyle = '#000';
@@ -229,8 +232,20 @@ export class SkinPainter {
 
     this.irritation.clearRect(0, 0, S, S);
     this.ink.clearRect(0, 0, S, S);
+    this.stencil.clearRect(0, 0, S, S);
     this.last = null;
     this.stamps = 0;
+    this.dirty = true;
+  }
+
+  /** Show (or clear, with null) a faint purple guide of the client's design. */
+  setStencil(c: Customer | null): void {
+    const st = this.stencil;
+    st.clearRect(0, 0, TEX_SIZE, TEX_SIZE);
+    if (c && !c.surprise) {
+      st.strokeStyle = 'rgba(120, 60, 200, 0.45)';
+      renderDesign(st, c.design, TEX_SIZE / 2, TEX_SIZE / 2, c.job.half, c.job.lineWidthPx * 0.6, 'rgba(120, 60, 200, 0.18)');
+    }
     this.dirty = true;
   }
 
@@ -250,8 +265,9 @@ export class SkinPainter {
     const y = (1 - uv.y) * TEX_SIZE;
     const from = this.last ?? { x, y };
     const dist = Math.hypot(x - from.x, y - from.y);
-    // A big jump means the mesh lurched or the cursor left and re-entered; don't draw a line across.
-    if (dist > TEX_SIZE * 0.08) {
+    // Only a huge jump is a glitch (e.g. a flinch lurch); leaving the skin already lifts the
+    // stroke. Fast swipes on slow phones can legitimately cover ~1/4 of the canvas per frame.
+    if (dist > TEX_SIZE * 0.3) {
       this.last = { x, y };
       return;
     }
@@ -290,6 +306,7 @@ export class SkinPainter {
     c.save();
     c.clip(this.silhouette);
     c.drawImage(this.base.canvas, 0, 0);
+    c.drawImage(this.stencil.canvas, 0, 0);
     c.drawImage(this.irritation.canvas, 0, 0);
     c.drawImage(this.ink.canvas, 0, 0);
     c.restore();
@@ -301,6 +318,19 @@ export class SkinPainter {
    * The player's ink as a GRID×GRID mask over the job's crop square, plus how much ink
    * (in grid cells) landed outside the crop where it can only count against them.
    */
+  /** Copy of the ink layer, kept so a botched client can come back with it. */
+  exportInk(): HTMLCanvasElement {
+    const [c, ctx] = makeCanvas();
+    ctx.drawImage(this.ink.canvas, 0, 0);
+    return c;
+  }
+
+  /** Start this client's skin with existing ink (a returning cover-up client). */
+  loadInk(src: HTMLCanvasElement): void {
+    this.ink.drawImage(src, 0, 0);
+    this.dirty = true;
+  }
+
   inkMask(job: JobSpec): { mask: Uint8Array; stray: number } {
     const mask = toMask(this.ink.canvas, job.cropHalf);
     // Stray ink: sample the whole canvas coarsely and count samples outside the crop.

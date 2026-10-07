@@ -1,12 +1,16 @@
 /**
  * Customer generation: who waddles in, what they want, and how badly they'll squirm.
  */
-import { designsFor, type Design } from './designs';
+import { BLACKOUT, designsFor, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
-import { randomLooks, type Looks } from './portrait';
+import { randomLooks, type Looks, type Sex } from './portrait';
+import { ShuffleBag, aside } from './humor';
 
 export interface Customer {
   name: string;
+  sex: Sex;
+  /** Rear proportions: width and depth multipliers around 1. */
+  body: { width: number; depth: number };
   looks: Looks;
   job: JobSpec;
   design: Design;
@@ -25,24 +29,151 @@ export interface Customer {
   /** Multiplier on the tip they leave. */
   generosity: number;
   trait: string;
+  /** "Surprise me": no reference; graded on vibes. */
+  surprise?: boolean;
+  /** The design they'll switch to partway through. */
+  mindChange?: Design;
+  /** Set once they've changed their mind: what they originally asked for. */
+  originalDesign?: Design;
+  /** A returning client you botched: fix the old design, or black it out. */
+  coverUp?: 'fix' | 'blackout';
+  /** Boss clients have their own disruptive behavior and pay double. */
+  boss?: BossId;
+  /** Couples jobs: the second client, getting the same design next to this one. */
+  partner?: Customer;
 }
 
-const NAMES = [
-  'Gary', 'Brenda', 'Big Steve', 'Tammy', 'Doug', 'Kyle', 'Linda', 'Chad',
-  'Deb', 'Randy', 'Crystal', 'Earl', 'Marge', 'Todd', 'Becky', 'Vince',
-  'Pam', 'Duane', 'Sheila', 'Lance', 'Gloria', 'Rusty', 'Darlene', 'Moose',
-];
+/** Two clients, matching tattoos. The returned customer is the "lead"; `.partner` is the other. */
+export function makeCouple(day: number, rand: () => number = Math.random, avoidNames: string[] = []): Customer {
+  // Text designs read badly pluralized ("matching no ragretss"), so couples get pictures.
+  let a = makeCustomer(day, rand, [], { job: 'cheek', surprise: false, mindChange: false, avoidNames });
+  for (let i = 0; i < 20 && a.design.request; i++) {
+    a = makeCustomer(day, rand, [], { job: 'cheek', surprise: false, mindChange: false, avoidNames });
+  }
+  const b = makeCustomer(day, rand, [], {
+    job: 'cheek', design: a.design.id, surprise: false, mindChange: false,
+    sex: rand() < 0.75 ? (a.sex === 'f' ? 'm' : 'f') : a.sex,
+    avoidNames: [...avoidNames, a.name],
+  });
+  const d = a.design.name.toLowerCase();
+  return {
+    ...a,
+    name: `${a.name} & ${b.name}`,
+    request: aside('coupleRequest').replaceAll('{d}', d),
+    trait: 'Couple · matching tattoos',
+    generosity: a.generosity * 1.4,
+    partner: b,
+  };
+}
+
+export type BossId = 'bodybuilder' | 'grandma' | 'influencer';
+
+export const BOSSES: Record<BossId, { name: string; sex: Sex; trait: string; request: string; job?: JobKind }> = {
+  bodybuilder: {
+    name: 'Big Brad', sex: 'm', trait: 'Bodybuilder · flexes without warning', job: 'cheek',
+    request: "I need something big. Like me. Don't mind the flexing. I don't control it anymore.",
+  },
+  grandma: {
+    name: 'Grandma Ruth', sex: 'f', trait: 'Never stops talking',
+    request: "My grandson dared me. I'm 81. I don't lose dares. Now, did I ever tell you about—",
+  },
+  influencer: {
+    name: 'Kaylee', sex: 'f', trait: 'Influencer · filming everything',
+    request: "Hey guys! So I'm getting a butt tattoo for content. Make it pop. Like, literally.",
+  },
+};
+
+const bossBag = new ShuffleBag(Object.keys(BOSSES) as BossId[]);
+
+/** Build a boss client. Bosses pay double and bring their own chaos. */
+export function makeBoss(day: number, rand: () => number = Math.random, id: BossId = bossBag.next()): Customer {
+  const b = BOSSES[id];
+  const base = makeCustomer(day, rand, [], { job: b.job, sex: b.sex, surprise: false, mindChange: false });
+  const looks = { ...base.looks };
+  if (id === 'grandma') Object.assign(looks, { hair: 'bun', hairColor: '#d6d6d6', glasses: true, lips: '#c0406a' });
+  if (id === 'bodybuilder') Object.assign(looks, { hair: 'spiky', facial: 'none', shirt: '#d4a72c' });
+  if (id === 'influencer') Object.assign(looks, { hair: 'long', hairColor: '#e0c26a', earrings: true, shirt: '#ff3fa4' });
+  return {
+    ...base,
+    name: b.name,
+    looks,
+    request: b.request,
+    trait: b.trait,
+    boss: id,
+    body: id === 'bodybuilder' ? { width: 1.12, depth: 1.22 } : base.body,
+    squirm: id === 'bodybuilder' ? 0.1 : base.squirm,
+    sensitivity: id === 'bodybuilder' ? 0.2 : base.sensitivity,
+    generosity: base.generosity * 2,
+  };
+}
+
+/** A botched job, remembered so the client can come back for a cover-up. */
+export interface Regret {
+  customer: Customer;
+  score: number;
+  ink: HTMLCanvasElement;
+  snap: HTMLCanvasElement;
+}
+
+/** The same client, back with your old ink: fix it (35–59%) or black it out (<35%). */
+export function makeReturningCustomer(r: Regret): Customer {
+  const old = r.customer;
+  const blackout = r.score < 35;
+  const design = blackout ? BLACKOUT : old.originalDesign ?? old.design;
+  const d = design.name.toLowerCase();
+  const line = aside(blackout ? 'returnBlackout' : 'returnFix')
+    .replaceAll('{d}', d)
+    .replaceAll('{D}', d.charAt(0).toUpperCase() + d.slice(1));
+  return {
+    ...old,
+    job: blackout ? JOBS.cheek : old.job,
+    design,
+    request: line,
+    trait: `Returning customer · ${old.trait}`,
+    generosity: old.generosity * 1.5,
+    surprise: undefined,
+    mindChange: undefined,
+    originalDesign: undefined,
+    coverUp: blackout ? 'blackout' : 'fix',
+  };
+}
+
+/** Placeholder design for "surprise me" clients: nothing to trace. */
+export function surpriseDesign(job: JobKind): Design {
+  return {
+    id: 'surprise',
+    name: 'Surprise',
+    job,
+    tip: 'Anything you want. They trust you. Unwisely.',
+    draw() {},
+  };
+}
+
+const NAMES: Record<Sex, string[]> = {
+  m: ['Gary', 'Big Steve', 'Doug', 'Kyle', 'Chad', 'Randy', 'Earl', 'Todd', 'Vince', 'Duane', 'Lance', 'Rusty', 'Moose', 'Dale'],
+  f: ['Brenda', 'Tammy', 'Linda', 'Deb', 'Crystal', 'Marge', 'Becky', 'Pam', 'Sheila', 'Gloria', 'Darlene', 'Rhonda', 'Trish', 'Jolene', 'Bev', 'Doreen'],
+};
+/** Words that change with the client: {ex} = pronoun for their ex (her/him), {partner}, {party}. */
+const WORDS: Record<Sex, Record<string, string>> = {
+  m: { ex: 'her', partner: 'wife', party: 'Bachelor party' },
+  f: { ex: 'him', partner: 'husband', party: 'Bachelorette party' },
+};
 
 const SKINS = ['#f5d0b5', '#eabf9f', '#d9a27e', '#c68a62', '#a86f4c', '#8a5537', '#6b3f28', '#f2c4c4'];
 
 const OPENERS: Record<JobKind | 'any', string[]> = {
   any: [
     'Lost a bet. Make it a {d}.',
-    'Bachelor party. Do not ask. Just a {d}.',
+    '{party}. Do not ask. Just a {d}.',
     "Fortune cookie said 'great things come from behind.' {D}, please.",
     "It's my 50th. I've earned a {d}.",
     'Saw it on TikTok. {D}. Go.',
     "My grandma had a {d} back there. Family tradition.",
+    'My therapist said to try new things. {D}.',
+    "I'm getting divorced. {D}. Make it count.",
+    "It's for a bet with my {partner}. Loser gets a {d}. I lost.",
+    'Cheaper than therapy. {D}, please.',
+    'I want to be buried with a {d}. Getting a head start.',
   ],
   hole: [
     "Right on the bullseye, chief. I want a {d}.",
@@ -50,17 +181,23 @@ const OPENERS: Record<JobKind | 'any', string[]> = {
     "I'm a private person. That's why I want a {d} in the MOST private place.",
     "Small {d}. Dead center. My doctor will know what it means.",
     "Ring of fire needs some decoration. {D}.",
+    "Put a {d} right on the bullseye. Doctor's orders. Not really.",
+    'Tiny {d}. Right on the button.',
+    'Something for my spray-tan lady to look at. {D}.',
   ],
   cheek: [
     "Go big. {D}. Both cheeks. Make it majestic.",
-    "My ex said I'd never get a {d} on my butt. Prove her wrong.",
+    "My ex said I'd never get a {d} on my butt. Prove {ex} wrong.",
     "I want people at the beach to SEE this {d}.",
     "Full canvas, baby. {D}. Spread it out.",
+    'Use the whole real estate. {D}.',
+    'Make it big enough to see from space. {D}.',
   ],
   moon: [
     "The whole moon, man. {D}. Cheeks AND center.",
     "I want the {d}. Don't skip the fiddly bit in the middle.",
     "Spare no expense. Spare no cheek. {D}.",
+    'Go big AND go small. {D}. You know what I mean.',
   ],
 };
 
@@ -80,10 +217,12 @@ function pick<T>(arr: readonly T[], rand: () => number): T {
   return arr[Math.floor(rand() * arr.length)];
 }
 
-function fillTemplate(t: string, design: Design): string {
+function fillTemplate(t: string, design: Design, sex: Sex): string {
   const lower = design.name.toLowerCase();
   const upper = design.name.charAt(0).toUpperCase() + design.name.slice(1);
-  return t.replaceAll('{d}', lower).replaceAll('{D}', upper);
+  let out = t.replaceAll('{d}', lower).replaceAll('{D}', upper);
+  for (const [k, v] of Object.entries(WORDS[sex])) out = out.replaceAll(`{${k}}`, v);
+  return out;
 }
 
 /** Full Moon jobs get more common as the days go on. */
@@ -95,12 +234,18 @@ export function pickJob(day: number, rand: () => number = Math.random): JobKind 
 }
 
 export interface CustomerOptions {
-  /** Force a job type (Demo Day, tutorial). */
+  /** Force a job type (e.g. the tutorial client). */
   job?: JobKind;
   /** Force a trait by label, e.g. 'Calm as a cucumber'. */
   trait?: string;
   /** Force a design by id. */
   design?: string;
+  sex?: Sex;
+  /** Names already used today, so a day never has two Darlenes. */
+  avoidNames?: string[];
+  /** Twists: force on/off. Undefined = roll for it (the tutorial passes false for both). */
+  surprise?: boolean;
+  mindChange?: boolean;
 }
 
 /**
@@ -113,22 +258,39 @@ export function makeCustomer(
   avoid: string[] = [],
   opts: CustomerOptions = {},
 ): Customer {
-  const kind = opts.job ?? pickJob(day, rand);
+  // Twists: about 10% "surprise me", about 12% change their mind partway through.
+  const twist = rand();
+  const surprise = opts.surprise ?? twist < 0.1;
+  const changes = !surprise && (opts.mindChange ?? (twist >= 0.1 && twist < 0.22));
+  let kind = opts.job ?? pickJob(day, rand);
+  if (surprise && kind === 'moon') kind = 'cheek';
   const all = designsFor(kind);
   const pool = all.filter((d) => !avoid.includes(d.id));
-  const design = all.find((d) => d.id === opts.design) ?? pick(pool.length ? pool : all, rand);
+  const design = surprise
+    ? surpriseDesign(kind)
+    : all.find((d) => d.id === opts.design) ?? pick(pool.length ? pool : all, rand);
+  const others = all.filter((d) => d.id !== design.id && !d.request);
+  const mindChange = changes && others.length ? pick(others, rand) : undefined;
   const trait = TRAITS.find((t) => t.label === opts.trait) ?? pick(TRAITS, rand);
   const skin = pick(SKINS, rand);
   const dayPressure = Math.min(0.35, (day - 1) * 0.07);
   const openers = rand() < 0.6 ? OPENERS[kind] : OPENERS.any;
+  const sex: Sex = opts.sex ?? (rand() < 0.5 ? 'f' : 'm');
+  // Rears come in all shapes. Women skew a little wider and rounder on average.
+  const width = 0.92 + rand() * 0.16 + (sex === 'f' ? 0.04 : 0);
+  const depth = 0.85 + rand() * 0.35 + (sex === 'f' ? 0.05 : 0);
   return {
-    name: pick(NAMES, rand),
-    looks: randomLooks(skin, rand),
+    name: pick(NAMES[sex].filter((n) => !opts.avoidNames?.includes(n)), rand) ?? pick(NAMES[sex], rand),
+    sex,
+    body: { width, depth },
+    looks: randomLooks(skin, sex, rand),
     job: JOBS[kind],
     design,
-    request: fillTemplate(pick(openers, rand), design),
+    request: surprise ? aside('surpriseRequest') : design.request ?? fillTemplate(pick(openers, rand), design, sex),
+    surprise: surprise || undefined,
+    mindChange,
     skin,
-    hairiness: trait.hair,
+    hairiness: sex === 'f' ? trait.hair * 0.4 : trait.hair,
     squirm: Math.min(1, trait.squirm + dayPressure),
     sensitivity: trait.sensitivity,
     puckeriness: Math.min(1, trait.pucker + dayPressure * 0.5),
@@ -137,49 +299,129 @@ export function makeCustomer(
   };
 }
 
-export function reactionFor(score: number, c: Customer): string {
-  const d = c.design.name.toLowerCase();
-  if (score >= 92) return pick([
-    `*sobbing* It's the most beautiful ${d} I've ever had back there.`,
-    `I'm going to show this to EVERYONE. Mom included.`,
-    `Five stars. I'd sit for you again. Well, not sit. You know.`,
-  ], Math.random);
-  if (score >= 80) return pick([
-    `Oh that's a solid ${d}. My butt has never looked so cultured.`,
-    `Nice! A little wobbly, but so am I.`,
-    `Yeah that's a ${d}. I'm telling my proctologist.`,
-  ], Math.random);
-  if (score >= 65) return pick([
-    `It's... ${d}-adjacent. I'll take it.`,
-    `If I squint in the mirror, yeah. A ${d}.`,
-    `Honestly, nobody's gonna get a good look anyway.`,
-  ], Math.random);
-  if (score >= 50) return pick([
-    `Is that a ${d}? It looks like a weather map.`,
-    `My wife says it looks like a ${d} that got hit by a bus.`,
-    `I asked for a ${d}. This is a cry for help.`,
-  ], Math.random);
-  if (score >= 30) return pick([
-    `What... what IS that?`,
-    `I'm going to have to move to a new state.`,
-    `That's not a ${d}. That's a crime scene.`,
-  ], Math.random);
-  return pick([
-    `I'm calling my lawyer. And my priest.`,
-    `You drew a CRY FOR HELP on my BUTT.`,
-    `There is nothing back there but regret and ink.`,
-  ], Math.random);
+/** Mirror reactions by grade tier. Tokens: {d} design, {partner}. */
+const REACTIONS: Record<'S' | 'A' | 'B' | 'C' | 'D' | 'F', string[]> = {
+  S: [
+    "*sobbing* It's the most beautiful {d} I've ever had back there.",
+    "I'm going to show this to EVERYONE. Mom included.",
+    "Five stars. I'd sit for you again. Well, not sit. You know.",
+    'I am going to start wearing assless chaps. For the art.',
+    'My {partner} is going to be SO confused. And proud.',
+    'This is the best thing that has ever happened to my butt. And I once sat on a heated seat in a Lexus.',
+  ],
+  A: [
+    "Oh that's a solid {d}. My butt has never looked so cultured.",
+    'Nice! A little wobbly, but so am I.',
+    "Yeah that's a {d}. I'm telling my proctologist.",
+    'Wow. I feel like a museum.',
+    'Clean lines. Unlike me.',
+    "That's going on the family Christmas card.",
+  ],
+  B: [
+    "It's... {d}-adjacent. I'll take it.",
+    'If I squint in the mirror, yeah. A {d}.',
+    "Honestly, nobody's gonna get a good look anyway.",
+    "It's got character. Like my uncle.",
+    "Good enough. I'm not paying for a second opinion.",
+    'From across the room this is fantastic.',
+  ],
+  C: [
+    'Is that a {d}? It looks like a weather map.',
+    'My {partner} says it looks like a {d} that got hit by a bus.',
+    'I asked for a {d}. This is a cry for help.',
+    'It looks like a {d} described over the phone.',
+    'I think it looks better upside down. Which is how people will see it.',
+    'Did you draw this with your other hand?',
+  ],
+  D: [
+    'What... what IS that?',
+    "I'm going to have to move to a new state.",
+    "That's not a {d}. That's a crime scene.",
+    "That's not a tattoo, that's a Rorschach test.",
+    'My dog would have done better. My dog is dead.',
+    'I see a {d}. Wait, no. A potato.',
+  ],
+  F: [
+    "I'm calling my lawyer. And my priest.",
+    'You drew a CRY FOR HELP on my BUTT.',
+    'There is nothing back there but regret and ink.',
+    "I'm going to need you to sign this NDA.",
+    'Is this... is this a hate crime?',
+    'My ex was right about me. And about you.',
+  ],
+};
+
+const reactionBags = new Map<string, ShuffleBag<string>>();
+function nextFrom(map: Map<string, ShuffleBag<string>>, key: string, pool: readonly string[]): string {
+  let bag = map.get(key);
+  if (!bag) {
+    bag = new ShuffleBag(pool);
+    map.set(key, bag);
+  }
+  return bag.next();
 }
 
-export function reviewFor(score: number, c: Customer): string {
+function fillTokens(t: string, c: Customer): string {
+  let out = t.replaceAll('{d}', c.design.name.toLowerCase());
+  for (const [k, v] of Object.entries(WORDS[c.sex])) out = out.replaceAll(`{${k}}`, v);
+  return out;
+}
+
+export function reactionFor(score: number, c: Customer): string {
+  const tier = score >= 92 ? 'S' : score >= 80 ? 'A' : score >= 65 ? 'B' : score >= 50 ? 'C' : score >= 30 ? 'D' : 'F';
+  return fillTokens(nextFrom(reactionBags, tier, REACTIONS[tier]), c);
+}
+
+const REVIEWS: string[][] = [
+  [],
+  [
+    '"Ruined my life and my {d}. Bathroom was clean though."',
+    '"I came in for a {d}. I left with a police sketch."',
+    '"Zero stars if I could. My doctor gasped."',
+    '"The artist apologized. Then apologized to my {partner}."',
+    '"Would not recommend. Parking was easy though."',
+    '"I have to shower in the dark now."',
+  ],
+  [
+    '"Not great. Sitting down is now a deeply emotional experience."',
+    '"The {d} is... present. That\'s all I\'ll say."',
+    '"Artist seemed confused about which end was which."',
+    '"Two stars. One for the {d}, one for the free mint."',
+    '"My {partner} asked for a refund on my behalf."',
+  ],
+  [
+    '"Decent work. Artist did not make eye contact, which I appreciated."',
+    '"Solid {d}. Mostly. From a distance. In low light."',
+    '"Would recommend to people I only sort of like."',
+    '"Fine. The magazines in the waiting room were from 2003."',
+    '"It\'s a {d} if you\'re generous. I am not generous. Three stars."',
+  ],
+  [
+    '"Great vibes, steady hands. Would bend over again."',
+    '"My {d} gets compliments at the gym. Wrong kind of attention, but still."',
+    '"Clean lines, cold hands. Four stars."',
+    '"Lost a star because the artist hummed the Jaws theme."',
+    '"Professional, discreet, and only laughed twice."',
+  ],
+  [
+    '"A MASTERPIECE. The Louvre should be calling. They won\'t, but they should."',
+    '"I cried. My {partner} cried. Perfect."',
+    '"Best thing to ever happen back there. And I\'ve had a colonoscopy."',
+    '"10/10. Would moon again."',
+    '"My ex saw it at the beach and wept. Worth every penny."',
+  ],
+];
+
+const reviewBags = new Map<string, ShuffleBag<string>>();
+
+/** `used` collects review templates already shown, so one summary doesn't repeat a joke. */
+export function reviewFor(score: number, c: Customer, used: Set<string> = new Set()): string {
   const stars = score >= 92 ? 5 : score >= 80 ? 4 : score >= 65 ? 3 : score >= 40 ? 2 : 1;
-  const body = [
-    '',
-    `"Ruined my life and my ${c.design.name.toLowerCase()}. Bathroom was clean though."`,
-    `"Not great. Sitting down is now a deeply emotional experience."`,
-    `"Decent work. Artist did not make eye contact, which I appreciated."`,
-    `"Great vibes, steady hands. Would bend over again."`,
-    `"A MASTERPIECE. The Louvre should be calling. They won't, but they should."`,
-  ][stars];
-  return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${body}`;
+  let template = nextFrom(reviewBags, String(stars), REVIEWS[stars]);
+  // The bag already avoids repeats; this guards a reshuffle landing mid-summary.
+  for (let i = 0; used.has(template) && i < REVIEWS[stars].length; i++) {
+    template = nextFrom(reviewBags, String(stars), REVIEWS[stars]);
+  }
+  used.add(template);
+  return `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} ${c.name}: ${fillTokens(template, c)}`;
 }

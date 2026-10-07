@@ -2,19 +2,26 @@
  * Procedural 32×32 pixel-art client portraits with live moods.
  * Displayed with `image-rendering: pixelated` so each pixel stays a chunky block.
  */
-export type HairStyle = 'bald' | 'mohawk' | 'mullet' | 'bun' | 'spiky' | 'afro' | 'combover';
+export type Sex = 'f' | 'm';
+export type HairStyle =
+  | 'bald' | 'mohawk' | 'mullet' | 'bun' | 'spiky' | 'afro' | 'combover'
+  | 'long' | 'ponytail' | 'bob' | 'pigtails';
 export type FacialHair = 'none' | 'beard' | 'stache' | 'goatee';
 export type Mood =
   | 'calm' | 'nervous' | 'hurt' | 'agony'
   | 'thrilled' | 'happy' | 'meh' | 'mad' | 'devastated';
 
 export interface Looks {
+  sex: Sex;
   skin: string;
   hair: HairStyle;
   hairColor: string;
   facial: FacialHair;
   glasses: boolean;
   shirt: string;
+  /** Lipstick color (women), or null. */
+  lips: string | null;
+  earrings: boolean;
 }
 
 export const PORTRAIT_SIZE = 32;
@@ -24,20 +31,27 @@ const MOOD_BG: Record<Mood, string> = {
   thrilled: '#3a8a4f', happy: '#3a7a5a', meh: '#55506a', mad: '#8a2a2a', devastated: '#3a3f6a',
 };
 
-const HAIR_STYLES: HairStyle[] = ['bald', 'mohawk', 'mullet', 'bun', 'spiky', 'afro', 'combover'];
+const HAIR_STYLES: Record<Sex, HairStyle[]> = {
+  m: ['bald', 'mohawk', 'mullet', 'bun', 'spiky', 'afro', 'combover'],
+  f: ['long', 'long', 'ponytail', 'ponytail', 'bob', 'bun', 'pigtails', 'afro', 'mohawk'],
+};
+const LIPSTICKS = ['#d0304a', '#e0567a', '#a8204a', '#c0406a', '#8a3a7a'];
 const HAIR_COLORS = ['#2b1d14', '#5a3a1e', '#a8743a', '#e0c26a', '#d6d6d6', '#b8382a', '#5b2a86', '#1f8a6a'];
 const FACIALS: FacialHair[] = ['none', 'none', 'beard', 'stache', 'goatee'];
 const SHIRTS = ['#3d6fb6', '#b63d5a', '#3db66f', '#d4a72c', '#6b3db6', '#444', '#c25b2a'];
 
-export function randomLooks(skin: string, rand: () => number = Math.random): Looks {
+export function randomLooks(skin: string, sex: Sex = 'm', rand: () => number = Math.random): Looks {
   const pick = <T,>(a: readonly T[]) => a[Math.floor(rand() * a.length)];
   return {
+    sex,
     skin,
-    hair: pick(HAIR_STYLES),
+    hair: pick(HAIR_STYLES[sex]),
     hairColor: pick(HAIR_COLORS),
-    facial: pick(FACIALS),
+    facial: sex === 'm' ? pick(FACIALS) : 'none',
     glasses: rand() < 0.3,
     shirt: pick(SHIRTS),
+    lips: sex === 'f' && rand() < 0.75 ? pick(LIPSTICKS) : null,
+    earrings: sex === 'f' ? rand() < 0.6 : rand() < 0.1,
   };
 }
 
@@ -85,6 +99,10 @@ export function drawPortrait(canvas: HTMLCanvasElement, looks: Looks, mood: Mood
     case 'afro': px(5, 1, 22, 9, hc); px(4, 4, 2, 12, hc); px(26, 4, 2, 12, hc); break;
     case 'combover': px(9, 6, 14, 2, hc); px(15, 5, 8, 1, hc); px(9, 8, 4, 1, hc); break;
     case 'bald': px(13, 8, 4, 1, '#ffffff55'); break;
+    case 'long': px(9, 5, 14, 4, hc); px(7, 7, 3, 21, hc); px(22, 7, 3, 21, hc); px(9, 8, 3, 3, hc); break;
+    case 'bob': px(8, 5, 16, 5, hc); px(7, 8, 3, 15, hc); px(22, 8, 3, 15, hc); px(10, 9, 5, 2, hc); break;
+    case 'ponytail': px(9, 5, 14, 4, hc); px(8, 8, 1, 4, hc); px(23, 8, 1, 4, hc); px(24, 6, 3, 3, hc); px(25, 9, 3, 10, hc); px(26, 19, 2, 3, hc); break;
+    case 'pigtails': px(9, 5, 14, 4, hc); px(8, 8, 1, 3, hc); px(23, 8, 1, 3, hc); px(4, 9, 4, 3, hc); px(24, 9, 4, 3, hc); px(3, 12, 3, 8, hc); px(26, 12, 3, 8, hc); break;
   }
 
   // Eyebrows, angled by mood. Inner end = toward the nose.
@@ -116,6 +134,11 @@ export function drawPortrait(canvas: HTMLCanvasElement, looks: Looks, mood: Mood
     if (mood === 'meh') { px(11, 14, 3, 1, skinShade); px(18, 14, 3, 1, skinShade); }
   }
 
+  // Lashes.
+  if (looks.sex === 'f' && !(mood === 'hurt' || mood === 'agony' || mood === 'thrilled')) {
+    px(10, 13, 1, 1, ink); px(14, 13, 1, 1, ink); px(17, 13, 1, 1, ink); px(21, 13, 1, 1, ink);
+  }
+
   // Glasses.
   if (looks.glasses) {
     ctx.fillStyle = ink;
@@ -133,8 +156,11 @@ export function drawPortrait(canvas: HTMLCanvasElement, looks: Looks, mood: Mood
   if (looks.facial === 'stache') px(12, 20, 8, 1, hc);
   if (looks.facial === 'goatee') { px(14, 24, 4, 3, hc); px(12, 20, 8, 1, hc); }
 
+  // Earrings.
+  if (looks.earrings) { px(7, 19, 1, 2, '#f4e04d'); px(24, 19, 1, 2, '#f4e04d'); }
+
   // Mouth.
-  const lip = '#7a2a2a';
+  const lip = looks.lips ?? '#7a2a2a';
   switch (mood) {
     case 'calm': px(13, 22, 6, 1, lip); break;
     case 'happy': px(12, 21, 1, 1, lip); px(13, 22, 6, 1, lip); px(19, 21, 1, 1, lip); break;

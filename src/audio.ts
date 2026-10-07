@@ -64,21 +64,28 @@ export class GunAudio {
     return this.muted;
   }
 
-  /** Short pitched blip for UI feedback (e.g. a yelp when the customer flinches). */
-  yelp(): void {
+  /**
+   * Retro menu beep. `select` is a single short blip; `confirm` is a rising two-note
+   * chirp for primary buttons. Square waves, like an old console menu.
+   */
+  beep(kind: 'select' | 'confirm' = 'select'): void {
+    this.ensure();
     if (!this.ctx || this.muted) return;
+    void this.ctx.resume();
     const ctx = this.ctx;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(520, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(980, ctx.currentTime + 0.12);
-    osc.frequency.exponentialRampToValueAtTime(340, ctx.currentTime + 0.3);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
-    osc.connect(g).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
+    const notes = kind === 'confirm' ? [660, 990] : [880];
+    notes.forEach((freq, i) => {
+      const t0 = ctx.currentTime + i * 0.07;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.07);
+    });
   }
 }

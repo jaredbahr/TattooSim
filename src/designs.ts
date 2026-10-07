@@ -12,6 +12,7 @@
  *   cheek centers ≈ (±0.61, 0.24) · lower back ≈ y < -0.6 · avoid x≈0 below y 0.6 (the gap)
  */
 import type { JobKind } from './jobs';
+import { charCenter, strokeText } from './strokefont';
 
 export interface Design {
   id: string;
@@ -23,6 +24,10 @@ export interface Design {
   draw(ctx: CanvasRenderingContext2D): void;
   /** Solid areas (filled), e.g. tribal and silhouettes. */
   fill?(ctx: CanvasRenderingContext2D): void;
+  /** Custom walk-in request (text tattoos read badly through the generic "Make it a {d}"). */
+  request?: string;
+  /** Only used by special jobs (e.g. cover-ups); never picked at random. */
+  special?: boolean;
 }
 
 type Pt = [number, number];
@@ -281,6 +286,73 @@ export const DESIGNS: Design[] = [
     },
   },
 
+  // ───────────── Text tattoos (single-stroke font, see strokefont.ts) ─────────────
+  {
+    id: 'exitonly', name: 'Exit Only', job: 'cheek',
+    tip: 'Sign on the lower back, arrow pointing at the exit. Obviously.',
+    request: 'I need signage back there. EXIT ONLY. Big arrow. People need to know.',
+    draw(ctx) {
+      strokeText(ctx, 'EXIT', 0, -1.05, 0.28);
+      strokeText(ctx, 'ONLY', 0, -0.7, 0.28);
+      ctx.moveTo(0, -0.5);
+      ctx.lineTo(0, -0.2);
+      ctx.moveTo(-0.11, -0.33);
+      ctx.lineTo(0, -0.2);
+      ctx.lineTo(0.11, -0.33);
+    },
+  },
+  {
+    id: 'ragrets', name: 'No Ragrets', job: 'cheek',
+    tip: 'Spelled exactly like that. The client was very clear.',
+    request: "NO RAGRETS. Spell it exactly like that. Don't fix it. I know what I said.",
+    draw(ctx) {
+      strokeText(ctx, 'NO', 0, -1.02, 0.28);
+      strokeText(ctx, 'RAGRETS', 0, -0.66, 0.28);
+    },
+  },
+  {
+    id: 'lovehate', name: 'Love / Hate', job: 'cheek',
+    tip: 'LOVE on the left cheek, HATE on the right. Duality.',
+    request: 'LOVE on the left cheek, HATE on the right. I contain multitudes.',
+    draw(ctx) {
+      strokeText(ctx, 'LOVE', -0.62, 0.22, 0.26);
+      strokeText(ctx, 'HATE', 0.62, 0.22, 0.26);
+    },
+  },
+  {
+    id: 'butt', name: 'BUTT Label', job: 'cheek',
+    tip: 'Big block letters across both cheeks. In case anyone was confused.',
+    request: 'Just label it. BUTT. Big letters. In case of emergency.',
+    draw(ctx) {
+      strokeText(ctx, 'BUTT', 0, 0.2, 0.5);
+    },
+  },
+  {
+    id: 'momheart', name: 'Mom Heart', job: 'cheek',
+    tip: 'A heart with MOM in it. A classic, relocated.',
+    request: "A heart that says MOM. She'll never see it. Hopefully.",
+    draw(ctx) {
+      const k = 0.8;
+      ctx.moveTo(0, 0.6 * k);
+      ctx.bezierCurveTo(-0.6 * k, 0.25 * k, -1.15 * k, -0.15 * k, -0.95 * k, -0.6 * k);
+      ctx.bezierCurveTo(-0.78 * k, -1.05 * k, -0.18 * k, -1.05 * k, 0, -0.6 * k);
+      ctx.bezierCurveTo(0.18 * k, -1.05 * k, 0.78 * k, -1.05 * k, 0.95 * k, -0.6 * k);
+      ctx.bezierCurveTo(1.15 * k, -0.15 * k, 0.6 * k, 0.25 * k, 0, 0.6 * k);
+      strokeText(ctx, 'MOM', 0, -0.3, 0.3);
+    },
+  },
+  {
+    id: 'yolo', name: 'YOLO', job: 'hole',
+    tip: "The hole is the first O. Don't overthink it.",
+    request: 'YOLO. Use the hole as the O. Work smarter, not harder.',
+    draw(ctx) {
+      // Position the text so the first O sits exactly on the hole, and leave it blank.
+      const h = 0.42;
+      const cx = -charCenter('YOLO', 1, 0, h);
+      strokeText(ctx, 'YOLO', cx, 0, h, [1]);
+    },
+  },
+
   // ───────────── Full Moon: cheek-sized piece with hole-sized detail ─────────────
   {
     id: 'phoenix', name: 'Phoenix Rising', job: 'moon',
@@ -362,5 +434,21 @@ export function renderDesign(
 }
 
 export function designsFor(job: JobKind): Design[] {
-  return DESIGNS.filter((d) => d.job === job);
+  return DESIGNS.filter((d) => d.job === job && !d.special);
+}
+
+/** Cover-up for a botched job: one big solid heart over the whole area. */
+export const BLACKOUT: Design = {
+  id: 'blackout', name: 'Blackout Heart', job: 'cheek', special: true,
+  tip: 'Fill the whole heart solid. Cover your crimes. Use the big needle.',
+  draw(ctx) { heartPath(ctx, 1.05, 0.05); },
+  fill(ctx) { heartPath(ctx, 1.05, 0.05); },
+};
+
+function heartPath(ctx: CanvasRenderingContext2D, k: number, dy: number): void {
+  ctx.moveTo(0, 0.6 * k + dy);
+  ctx.bezierCurveTo(-0.6 * k, 0.25 * k + dy, -1.15 * k, -0.15 * k + dy, -0.95 * k, -0.6 * k + dy);
+  ctx.bezierCurveTo(-0.78 * k, -1.05 * k + dy, -0.18 * k, -1.05 * k + dy, 0, -0.6 * k + dy);
+  ctx.bezierCurveTo(0.18 * k, -1.05 * k + dy, 0.78 * k, -1.05 * k + dy, 0.95 * k, -0.6 * k + dy);
+  ctx.bezierCurveTo(1.15 * k, -0.15 * k + dy, 0.6 * k, 0.25 * k + dy, 0, 0.6 * k + dy);
 }
