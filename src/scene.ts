@@ -177,7 +177,6 @@ export interface Rig {
   /** Mesh materials that should follow the customer's skin tone. */
   skinMaterials: THREE.MeshStandardMaterial[];
   shirtMaterial: THREE.MeshStandardMaterial;
-  hairMaterial: THREE.MeshStandardMaterial;
   /** 0 = relaxed, 1 = fully puckered. Physically pulls the skin (and the ink) toward the hole. */
   setPucker(amount: number): void;
   /**
@@ -423,7 +422,7 @@ function buildRig(scene: THREE.Scene, paintTexture: THREE.Texture, chrome: THREE
   }
 
   return {
-    customer, legs, canvasMesh, skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial,
+    customer, legs, canvasMesh, skinMaterials: [skin, thighMat], shirtMaterial,
     setPucker, setPose, setLooks, setFlex,
   };
 }

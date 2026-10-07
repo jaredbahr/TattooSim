@@ -7,6 +7,8 @@ import { ShuffleBag } from './humor';
 export interface StoryInput {
   clientName: string;
   sex: 'f' | 'm';
+  /** Couples make the paper together. */
+  couple?: boolean;
   designName: string;
   score: number;
 }
@@ -74,7 +76,7 @@ function fill(t: string, s: StoryInput, misread: string): string {
   return t
     .replaceAll('{D}', s.designName.toUpperCase())
     .replaceAll('{NAME}', s.clientName.toUpperCase())
-    .replaceAll('{PERSON}', s.sex === 'f' ? 'WOMAN' : 'MAN')
+    .replaceAll('{PERSON}', s.couple ? 'COUPLE' : s.sex === 'f' ? 'WOMAN' : 'MAN')
     .replaceAll('{X}', misread.toUpperCase());
 }
 

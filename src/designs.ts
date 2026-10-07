@@ -24,6 +24,8 @@ export interface Design {
   draw(ctx: CanvasRenderingContext2D): void;
   /** Solid areas (filled), e.g. tribal and silhouettes. */
   fill?(ctx: CanvasRenderingContext2D): void;
+  /** How dialogue names it when the lowercased name reads badly ("a angel wings"). */
+  noun?: string;
   /** Custom walk-in request (text tattoos read badly through the generic "Make it a {d}"). */
   request?: string;
   /** Only used by special jobs (e.g. cover-ups); never picked at random. */
@@ -170,7 +172,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'sun', name: 'Sunshine', job: 'hole',
+    id: 'sun', name: 'Sunshine', job: 'hole', noun: 'sunshine tattoo',
     tip: 'The sun shines out of it, apparently.',
     draw(ctx) {
       circle(ctx, 0, 0, 0.36);
@@ -238,7 +240,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'swallows', name: 'Sailor Swallows', job: 'cheek',
+    id: 'swallows', name: 'Sailor Swallows', job: 'cheek', noun: 'pair of sailor swallows',
     tip: 'One swallow per cheek, facing each other. Solid fill. Old-school.',
     draw(ctx) {
       polyline(ctx, place(SWALLOW, 0.34, -0.62, 0.22), true);
@@ -267,7 +269,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'wings', name: 'Angel Wings', job: 'cheek',
+    id: 'wings', name: 'Angel Wings', job: 'cheek', noun: 'pair of angel wings',
     tip: 'One wing per cheek, sweeping outward. Heaven sent. Heaven adjacent.',
     draw(ctx) {
       for (const s of [-1, 1]) {
@@ -288,7 +290,7 @@ export const DESIGNS: Design[] = [
 
   // ───────────── Text tattoos (single-stroke font, see strokefont.ts) ─────────────
   {
-    id: 'exitonly', name: 'Exit Only', job: 'cheek',
+    id: 'exitonly', name: 'Exit Only', job: 'cheek', noun: '"exit only" sign',
     tip: 'Sign on the lower back, arrow pointing at the exit. Obviously.',
     request: 'I need signage back there. EXIT ONLY. Big arrow. People need to know.',
     draw(ctx) {
@@ -302,7 +304,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'ragrets', name: 'No Ragrets', job: 'cheek',
+    id: 'ragrets', name: 'No Ragrets', job: 'cheek', noun: '"no ragrets" tattoo',
     tip: 'Spelled exactly like that. The client was very clear.',
     request: "NO RAGRETS. Spell it exactly like that. Don't fix it. I know what I said.",
     draw(ctx) {
@@ -311,7 +313,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'lovehate', name: 'Love / Hate', job: 'cheek',
+    id: 'lovehate', name: 'Love / Hate', job: 'cheek', noun: '"love / hate" tattoo',
     tip: 'LOVE on the left cheek, HATE on the right. Duality.',
     request: 'LOVE on the left cheek, HATE on the right. I contain multitudes.',
     draw(ctx) {
@@ -320,7 +322,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'butt', name: 'BUTT Label', job: 'cheek',
+    id: 'butt', name: 'BUTT Label', job: 'cheek', noun: '"butt" label',
     tip: 'Big block letters across both cheeks. In case anyone was confused.',
     request: 'Just label it. BUTT. Big letters. In case of emergency.',
     draw(ctx) {
@@ -342,7 +344,7 @@ export const DESIGNS: Design[] = [
     },
   },
   {
-    id: 'yolo', name: 'YOLO', job: 'hole',
+    id: 'yolo', name: 'YOLO', job: 'hole', noun: '"YOLO" tattoo',
     tip: "The hole is the first O. Don't overthink it.",
     request: 'YOLO. Use the hole as the O. Work smarter, not harder.',
     draw(ctx) {
@@ -451,4 +453,19 @@ function heartPath(ctx: CanvasRenderingContext2D, k: number, dy: number): void {
   ctx.bezierCurveTo(-0.78 * k, -1.05 * k + dy, -0.18 * k, -1.05 * k + dy, 0, -0.6 * k + dy);
   ctx.bezierCurveTo(0.18 * k, -1.05 * k + dy, 0.78 * k, -1.05 * k + dy, 0.95 * k, -0.6 * k + dy);
   ctx.bezierCurveTo(1.15 * k, -0.15 * k + dy, 0.6 * k, 0.25 * k + dy, 0, 0.6 * k + dy);
+}
+
+/**
+ * Fill a dialogue template with a design: {d} (noun), {D} (capitalized), {d}s (plural),
+ * and fixes "a {d}" to "an" before a vowel.
+ */
+export function fillDesign(t: string, design: Design): string {
+  const noun = design.noun ?? design.name.toLowerCase();
+  const plural = noun.startsWith('pair of ') ? `pairs of ${noun.slice(8)}` : noun.endsWith('s') ? noun : `${noun}s`;
+  const an = /^[aeiou]/i.test(noun);
+  return t
+    .replace(/\b([Aa]) \{d\}/g, (_, a: string) => `${a}${an ? 'n' : ''} {d}`)
+    .replaceAll('{d}s', plural)
+    .replaceAll('{D}', noun.replace(/[a-z]/, (ch) => ch.toUpperCase()))
+    .replaceAll('{d}', noun);
 }
