@@ -39,6 +39,31 @@ export interface Customer {
   coverUp?: 'fix' | 'blackout';
   /** Boss clients have their own disruptive behavior and pay double. */
   boss?: BossId;
+  /** Couples jobs: the second client, getting the same design next to this one. */
+  partner?: Customer;
+}
+
+/** Two clients, matching tattoos. The returned customer is the "lead"; `.partner` is the other. */
+export function makeCouple(day: number, rand: () => number = Math.random, avoidNames: string[] = []): Customer {
+  // Text designs read badly pluralized ("matching no ragretss"), so couples get pictures.
+  let a = makeCustomer(day, rand, [], { job: 'cheek', surprise: false, mindChange: false, avoidNames });
+  for (let i = 0; i < 20 && a.design.request; i++) {
+    a = makeCustomer(day, rand, [], { job: 'cheek', surprise: false, mindChange: false, avoidNames });
+  }
+  const b = makeCustomer(day, rand, [], {
+    job: 'cheek', design: a.design.id, surprise: false, mindChange: false,
+    sex: rand() < 0.75 ? (a.sex === 'f' ? 'm' : 'f') : a.sex,
+    avoidNames: [...avoidNames, a.name],
+  });
+  const d = a.design.name.toLowerCase();
+  return {
+    ...a,
+    name: `${a.name} & ${b.name}`,
+    request: aside('coupleRequest').replaceAll('{d}', d),
+    trait: 'Couple · matching tattoos',
+    generosity: a.generosity * 1.4,
+    partner: b,
+  };
 }
 
 export type BossId = 'bodybuilder' | 'grandma' | 'influencer';

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { buildWorld, CAMERA_POS, HI_RES_LAYER, ZOOM } from './scene';
 import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor } from './painter';
 import {
-  makeBoss, makeCustomer, makeReturningCustomer, reactionFor, reviewFor,
+  makeBoss, makeCouple, makeCustomer, makeReturningCustomer, reactionFor, reviewFor,
   type Customer, type CustomerOptions, type Regret,
 } from './customers';
 import { makeLogo } from './logo';
@@ -46,7 +46,13 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 // ---------- Setup ----------
 const stage = $('stage');
 const painter = new SkinPainter();
-const world = buildWorld(stage, painter.texture);
+/** Second skin, for the partner in couples jobs. */
+const partnerPainter = new SkinPainter();
+const world = buildWorld(stage, painter.texture, partnerPainter.texture);
+/** Couples stand side by side, this far either side of center. */
+const COUPLE_OFFSET = 1.35;
+/** Couples need a wider shot to fit both. */
+const COUPLE_WIDE_FOV = 40;
 const pipeline = new PS1Pipeline(world.renderer, world.snapRes);
 const audio = new GunAudio();
 const raycaster = new THREE.Raycaster();
@@ -66,6 +72,8 @@ const state = {
   returnedToday: false,
   /** "Before" photo of the current cover-up client's old work. */
   coverUpSnap: null as HTMLCanvasElement | null,
+  /** Test hook: force the next client's type once (used by automated playthroughs). */
+  forceNext: null as 'couple' | 'boss' | null,
   /** Seconds until the boss's next disruption; and the bodybuilder's flex (0..1). */
   bossTimer: 0,
   flex: 0,
@@ -173,7 +181,10 @@ function setZoom(target: 0 | 1): void {
   $('zoom-btn').innerHTML = `${target ? '🔭 Zoom out' : '🔍 Zoom in'}<kbd>Z</kbd>`;
 }
 function toggleZoom(): void {
-  setZoom(state.zoomTarget > 0.5 ? 0 : 1);
+  const zoomingIn = state.zoomTarget <= 0.5;
+  // Couples: zoom onto whichever client the cursor is over.
+  if (zoomingIn && state.customer?.partner) state.pan.x = pointer.x < 0 ? -COUPLE_OFFSET : COUPLE_OFFSET;
+  setZoom(zoomingIn ? 1 : 0);
 }
 
 $('finish-btn').addEventListener('click', () => finishJob());
@@ -362,9 +373,17 @@ function nextClient(): void {
   let regret: Regret | null = null;
   let c: Customer;
   // From day 2, the last client of the day is usually a boss.
-  const bossTime = state.day >= 2 && state.clientIndex === state.clientsToday - 1 && Math.random() < 0.75;
+  const forced = state.forceNext;
+  state.forceNext = null;
+  const bossTime = forced === 'boss'
+    || (!forced && state.day >= 2 && state.clientIndex === state.clientsToday - 1 && Math.random() < 0.75);
+  // From day 2, a few mid-day jobs are couples.
+  const coupleTime = forced === 'couple' || (!forced && state.day >= 2 && !bossTime && !returning
+    && state.clientIndex >= 1 && state.clientIndex <= 3 && Math.random() < 0.18);
   if (bossTime) {
     c = makeBoss(state.day);
+  } else if (coupleTime) {
+    c = makeCouple(state.day, Math.random, [...todaysNames, ...state.regrets.map((r) => r.customer.name)]);
   } else if (returning) {
     regret = state.regrets.splice(regretIdx, 1)[0];
     c = makeReturningCustomer(regret);
@@ -381,6 +400,14 @@ function nextClient(): void {
   if (regret) painter.loadInk(regret.ink);
   for (const m of world.skinMaterials) m.color.set(c.skin);
   world.shirtMaterial.color.set(c.looks.shirt);
+  const p = c.partner;
+  world.partner.customer.visible = !!p;
+  if (p) {
+    partnerPainter.prepare(p);
+    for (const m of world.partner.skinMaterials) m.color.set(p.skin);
+    world.partner.shirtMaterial.color.set(p.looks.shirt);
+    world.partner.setLooks(p.looks, p.body);
+  }
   state.zoom = state.zoomTarget = 0;
   state.pucker = 0;
   updateTopHud();
@@ -412,6 +439,13 @@ function showIntro(): void {
     [{ label: "Let's ink 🖊️", primary: true, onClick: startInking }],
   );
   drawPortrait(card.querySelector<HTMLCanvasElement>('#intro-portrait')!, c.looks, 'nervous');
+  if (c.partner) {
+    const second = document.createElement('canvas');
+    second.className = 'portrait';
+    second.style.cssText = 'width:80px;height:80px;margin-left:-14px';
+    drawPortrait(second, c.partner.looks, 'nervous');
+    card.querySelector('#intro-portrait')!.after(second);
+  }
   drawCard(card.querySelector<HTMLCanvasElement>('#intro-ref')!, c);
   if (state.coverUpSnap) card.querySelector<HTMLCanvasElement>('#intro-before')!.getContext('2d')!.drawImage(state.coverUpSnap, 0, 0);
 }
@@ -434,6 +468,7 @@ function startInking(): void {
   const fx = effectsOf(state.upgrades);
   state.timeLeft = state.timeLimit + c.job.timeBonus + fx.bonusSeconds;
   painter.setStencil(fx.stencil ? c : null);
+  if (c.partner) partnerPainter.setStencil(fx.stencil ? c.partner : null);
   state.pain = 0;
   state.flinchCooldown = 0;
   state.quipTimer = 4;
@@ -478,7 +513,7 @@ function playSideGag(gag: SideGag): void {
         const dir = Math.random() * Math.PI * 2;
         flinch.vel.set(Math.cos(dir) * 1.6, Math.sin(dir) * 1.2);
         pointerDown = false;
-        painter.lift();
+        liftPens();
       } else if (gag.effect === 'clench') {
         state.clench = 1;
         flinch.vel.y += 0.6;
@@ -496,7 +531,7 @@ function bossAct(): void {
   if (c.boss === 'bodybuilder') {
     state.flex = 1;
     pointerDown = false; // the flex knocks the gun off
-    painter.lift();
+    liftPens();
     flinch.vel.y += 1.2;
     say(`${c.name}: "${aside('bossFlex')}"`, 1300);
     state.bossTimer = 3.2 + Math.random() * 2;
@@ -553,7 +588,7 @@ function finishJob(): void {
   const c = state.customer!;
   state.phase = 'result';
   pointerDown = false;
-  painter.lift();
+  liftPens();
   audio.setBuzzing(false);
   stage.classList.remove('inking');
   $('bubble').classList.add('hidden');
@@ -562,7 +597,29 @@ function finishJob(): void {
 
   const ink = painter.inkMask(c.job);
   let score: ScoreBreakdown;
-  if (c.surprise) {
+  let couple: { a: number; b: number; match: number; better: string; worse: string } | null = null;
+  if (c.partner) {
+    // Each partner is judged on the design, then on how well the two match each other.
+    const tol = toleranceFor(c.job);
+    const inkB = partnerPainter.inkMask(c.job);
+    const sA = scoreMasks(ink.mask, targetMask(c), GRID, tol, ink.stray);
+    const sB = scoreMasks(inkB.mask, targetMask(c.partner), GRID, tol, inkB.stray);
+    const match = scoreMasks(ink.mask, inkB.mask, GRID, tol).score;
+    const final = Math.round(((sA.score + sB.score) / 2) * (0.7 + 0.3 * (match / 100)));
+    const [nameA] = c.name.split(' & ');
+    const nameB = c.partner.name;
+    couple = {
+      a: sA.score, b: sB.score, match,
+      better: sA.score >= sB.score ? nameA : nameB,
+      worse: sA.score >= sB.score ? nameB : nameA,
+    };
+    score = {
+      precision: (sA.precision + sB.precision) / 2,
+      recall: (sA.recall + sB.recall) / 2,
+      score: final,
+      grade: gradeFor(final),
+    };
+  } else if (c.surprise) {
     // No reference, so the grade is pure vibes. Doing nothing gets nothing.
     const inked = countOn(ink.mask) + ink.stray;
     const vibes = inked < 40 ? 0 : Math.round(30 + Math.random() * 70);
@@ -575,12 +632,16 @@ function finishJob(): void {
   state.cash += pay;
   state.dayCash += pay;
   state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
-  if (!c.surprise && !c.coverUp && !c.boss && score.score < 60) {
+  if (!c.surprise && !c.coverUp && !c.boss && !c.partner && score.score < 60) {
     state.regrets.push({ customer: c, score: score.score, ink: painter.exportInk(), snap: painter.snapshot(c.job, 200) });
   }
   updateTopHud();
 
-  const quote = !c.surprise
+  const quote = couple
+    ? Math.abs(couple.a - couple.b) >= 20
+      ? aside('coupleMismatch').replaceAll('{better}', couple.better).replaceAll('{worse}', couple.worse)
+      : aside(score.score >= 70 ? 'coupleGood' : 'coupleBad')
+    : !c.surprise
     ? reactionFor(score.score, c)
     : score.score === 0 ? aside('surpriseNothing')
     : score.score >= 75 ? aside('surpriseGood')
@@ -589,17 +650,22 @@ function finishJob(): void {
   const card = showModal(
     `<div class="client" style="gap:14px">
        ${portraitHtml('res-portrait', 64)}
-       <h2 style="margin:0">${escapeHtml(c.name)} checks the mirror…</h2>
+       <h2 style="margin:0">${escapeHtml(c.name)} ${c.partner ? 'check' : 'checks'} the mirror…</h2>
      </div>
      <div class="quote">"${escapeHtml(quote)}"</div>
      <div class="compare">
-       <figure><canvas id="res-ink" width="260" height="260"></canvas>Your work</figure>
-       <figure><canvas id="res-overlay" width="260" height="260"></canvas>${c.surprise ? 'vs. "surprise me"' : 'vs. the request'}</figure>
+       <figure><canvas id="res-ink" width="260" height="260"></canvas>${couple ? escapeHtml(c.name.split(' & ')[0]) : 'Your work'}</figure>
+       <figure><canvas id="res-overlay" width="260" height="260"></canvas>${couple ? escapeHtml(c.partner!.name) : c.surprise ? 'vs. "surprise me"' : 'vs. the request'}</figure>
      </div>
      <div class="score-row">
        <div class="grade ${score.grade}">${score.grade}</div>
        <dl class="stats">
-         ${c.surprise
+         ${couple
+           ? `<dt>${escapeHtml(c.name.split(' & ')[0])}</dt><dd>${couple.a}%</dd>
+         <dt>${escapeHtml(c.partner!.name)}</dt><dd>${couple.b}%</dd>
+         <dt>Matching</dt><dd>${couple.match}% <span class="muted">(how alike the two are)</span></dd>
+         <dt>Overall</dt><dd>${score.score}%</dd>`
+           : c.surprise
            ? `<dt>Vibes</dt><dd>${score.score}% <span class="muted">(there was no design, so it's all vibes)</span></dd>`
            : `<dt>Likeness</dt><dd>${score.score}%</dd>
          <dt>Accuracy</dt><dd>${Math.round(score.precision * 100)}% <span class="muted">of your ink was on-design${c.originalDesign ? ' (old design forgiven)' : ''}</span></dd>
@@ -635,7 +701,13 @@ function finishJob(): void {
   drawPortrait(card.querySelector<HTMLCanvasElement>('#res-portrait')!, c.looks, moodForScore(score.score));
   const snap = painter.snapshot(c.job, 260);
   card.querySelector<HTMLCanvasElement>('#res-ink')!.getContext('2d')!.drawImage(snap, 0, 0);
-  drawCard(card.querySelector<HTMLCanvasElement>('#res-overlay')!, c, snap);
+  if (c.partner) {
+    // Couples: show both results side by side, each with the design overlaid.
+    drawCard(card.querySelector<HTMLCanvasElement>('#res-ink')!, c, snap);
+    drawCard(card.querySelector<HTMLCanvasElement>('#res-overlay')!, c.partner, partnerPainter.snapshot(c.job, 260));
+  } else {
+    drawCard(card.querySelector<HTMLCanvasElement>('#res-overlay')!, c, snap);
+  }
 }
 
 function endDay(): void {
@@ -746,7 +818,8 @@ function touchGeometry(): { mid: { x: number; y: number }; dist: number } {
 /** Pan by a screen-space delta (px), so the skin follows your fingers. */
 function panBy(dx: number, dy: number): void {
   const worldPerPx = (2 * CAMERA_DIST * Math.tan(THREE.MathUtils.degToRad(world.camera.fov) / 2)) / canvasEl.clientHeight;
-  state.pan.x = THREE.MathUtils.clamp(state.pan.x - dx * worldPerPx, -PAN_LIMIT.x, PAN_LIMIT.x);
+  const limX = state.customer?.partner ? PAN_LIMIT.x + COUPLE_OFFSET : PAN_LIMIT.x;
+  state.pan.x = THREE.MathUtils.clamp(state.pan.x - dx * worldPerPx, -limX, limX);
   state.pan.y = THREE.MathUtils.clamp(state.pan.y + dy * worldPerPx, PAN_LIMIT.yMin, PAN_LIMIT.yMax);
 }
 
@@ -759,7 +832,7 @@ canvasEl.addEventListener('pointerdown', (e) => {
     if (touches.size >= 2) {
       // Second finger down: cancel any stroke the first finger started and switch to gesture.
       pointerDown = false;
-      painter.lift();
+      liftPens();
       gesture = touchGeometry();
       return;
     }
@@ -771,7 +844,7 @@ canvasEl.addEventListener('pointerdown', (e) => {
   }
   updatePointer(e);
   pointerDown = true;
-  painter.lift();
+  liftPens();
 });
 canvasEl.addEventListener('pointermove', (e) => {
   if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -801,7 +874,7 @@ const release = (e?: PointerEvent) => {
   if (touches.size === 0) gesture = null;
   mousePan = null;
   pointerDown = false;
-  painter.lift();
+  liftPens();
 };
 canvasEl.addEventListener('pointerup', release);
 canvasEl.addEventListener('pointercancel', release);
@@ -834,6 +907,12 @@ window.addEventListener('resize', onResize);
 onResize();
 
 // ---------- Per-frame simulation ----------
+let activeSkin = painter;
+/** End the current stroke on both skins (couples have two). */
+function liftPens(): void {
+  painter.lift();
+  partnerPainter.lift();
+}
 const tmpNormal = new THREE.Vector3();
 const toCam = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -850,6 +929,8 @@ function frame(dt: number): void {
 
   runTweens(dt);
   world.setPose(state.upright, state.pantsUp);
+  const couple = !!c?.partner && world.partner.customer.visible;
+  if (couple) world.partner.setPose(state.upright, state.pantsUp);
 
   // ---- Waddle: walk toward the target with swinging legs and a hip bob.
   const dx = state.walkTarget - state.walkX;
@@ -866,6 +947,8 @@ function frame(dt: number): void {
   const stride = walking ? Math.sin(t * 14) : 0;
   world.legs[0].rotation.x = stride * 0.35;
   world.legs[1].rotation.x = -stride * 0.35;
+  world.partner.legs[0].rotation.x = -stride * 0.35;
+  world.partner.legs[1].rotation.x = stride * 0.35;
 
   // ---- Squirm: idle sway + pain jitter + flinch spring.
   state.squirmBoost = Math.max(0, state.squirmBoost - dt * 0.15);
@@ -885,6 +968,17 @@ function frame(dt: number): void {
     0,
   );
   world.customer.rotation.z = amp * 0.6 * Math.sin(t * 1.1 + 2) + flinch.pos.x * 0.3 + stride * 0.06;
+  if (couple) {
+    // Side by side; the partner squirms on their own rhythm.
+    world.customer.position.x -= COUPLE_OFFSET;
+    const t2 = t + 1.9;
+    world.partner.customer.position.set(
+      state.walkX + COUPLE_OFFSET + amp * (Math.sin(t2 * 1.6) + 0.6 * Math.sin(t2 * 3.1 + 0.4)),
+      amp * 0.7 * Math.sin(t2 * 1.4) + Math.abs(stride) * 0.08,
+      0,
+    );
+    world.partner.customer.rotation.z = amp * 0.6 * Math.sin(t2 * 1.2) - stride * 0.06;
+  }
 
   // ---- Cheek clench and hole pucker.
   if (inking && Math.random() < dt * squirm * 0.25) state.clench = 1;
@@ -918,7 +1012,9 @@ function frame(dt: number): void {
   const ez = state.zoom * state.zoom * (3 - 2 * state.zoom);
   // Pull back to show the whole client while they're standing.
   const stand = easeInOut(Math.min(1, state.upright));
-  world.setFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(ZOOM.wide.fov, ZOOM.close.fov, ez), ZOOM.entrance.fov, stand));
+  const wideFov = couple ? COUPLE_WIDE_FOV : ZOOM.wide.fov;
+  const closeFov = couple ? 16 : ZOOM.close.fov;
+  world.setFov(THREE.MathUtils.lerp(THREE.MathUtils.lerp(wideFov, closeFov, ez), ZOOM.entrance.fov, stand));
   lookTarget.lerpVectors(ZOOM.wide.target, ZOOM.close.target, ez).lerp(ZOOM.entrance.target, stand);
   if (!inking) state.pan.multiplyScalar(Math.max(0, 1 - dt * 4));
   world.camera.position.set(
@@ -935,10 +1031,18 @@ function frame(dt: number): void {
   let hit: THREE.Intersection | undefined;
   if (pointerInside) {
     raycaster.setFromCamera(pointer, world.camera);
-    hit = raycaster.intersectObject(world.canvasMesh, false)[0];
+    const targets = couple ? [world.canvasMesh, world.partner.canvasMesh] : [world.canvasMesh];
+    hit = raycaster.intersectObjects(targets, false)[0];
+  }
+  // Which skin are we on? (Couples have two.)
+  const skin = hit && hit.object === world.partner.canvasMesh ? partnerPainter : painter;
+  if (skin !== activeSkin) {
+    liftPens();
+    partnerPainter.lift();
+    activeSkin = skin;
   }
   // The plane is alpha-cut to a silhouette; hits on the invisible part don't count.
-  if (hit && !(hit.uv && painter.isOnSkin(hit.uv))) hit = undefined;
+  if (hit && !(hit.uv && skin.isOnSkin(hit.uv))) hit = undefined;
   const buzzing = inking && pointerDown && !!hit;
   audio.setBuzzing(buzzing);
   world.gun.visible = inking && pointerInside;
@@ -946,7 +1050,7 @@ function frame(dt: number): void {
   world.gun.scale.setScalar(world.camera.fov / ZOOM.wide.fov);
 
   if (hit && hit.face) {
-    tmpNormal.copy(hit.face.normal).transformDirection(world.canvasMesh.matrixWorld);
+    tmpNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
     toCam.copy(world.camera.position).sub(hit.point).normalize();
     const dir = tmpNormal.multiplyScalar(0.5).addScaledVector(toCam, 0.5).add(tilt).normalize();
     world.gun.quaternion.setFromUnitVectors(UP, dir);
@@ -956,14 +1060,14 @@ function frame(dt: number): void {
       const jitter = 0.006 * world.gun.scale.x;
       world.gun.position.x += (Math.random() - 0.5) * jitter;
       world.gun.position.y += (Math.random() - 0.5) * jitter;
-      painter.paintAt(hit.uv!, BRUSHES[state.brush].radius);
+      skin.paintAt(hit.uv!, BRUSHES[state.brush].radius);
     }
   } else if (pointerInside) {
     // Off the skin: float the gun on a plane in front of the customer.
     raycaster.setFromCamera(pointer, world.camera);
     if (raycaster.ray.intersectPlane(offSkinPlane, tmpPoint)) world.gun.position.copy(tmpPoint);
     world.gun.quaternion.setFromUnitVectors(UP, tmpNormal.set(0.35, 0.45, 0.6).normalize());
-    painter.lift();
+    liftPens();
   }
   world.gunLight.intensity = buzzing ? 1.4 : 0;
 
@@ -986,7 +1090,7 @@ function frame(dt: number): void {
       // The jolt knocks the gun off the skin: it interrupts the stroke instead of
       // dragging a streak across the design. Press again to keep going.
       pointerDown = false;
-      painter.lift();
+      liftPens();
       say(aside('flinch'), 1200);
     }
     setMood(moodForPain(state.pain));
@@ -1023,6 +1127,7 @@ function frame(dt: number): void {
   }
 
   painter.flush();
+  partnerPainter.flush();
 }
 
 let last = performance.now();

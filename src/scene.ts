@@ -129,35 +129,16 @@ function poster(lines: string[], bg: string, fg: string): THREE.CanvasTexture {
   });
 }
 
-export interface World {
+export interface World extends Rig {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
-  /** Moves as a unit when the customer squirms or walks. */
-  customer: THREE.Group;
-  /** Hip pivots; rotate on X to swing the legs while waddling. */
-  legs: THREE.Group[];
-  /** The paintable mesh (raycast target). Lives on HI_RES_LAYER. */
-  canvasMesh: THREE.Mesh;
-  /** Mesh materials that should follow the customer's skin tone. */
-  skinMaterials: THREE.MeshStandardMaterial[];
-  shirtMaterial: THREE.MeshStandardMaterial;
-  hairMaterial: THREE.MeshStandardMaterial;
+  /** Second client, shown only for couples jobs. */
+  partner: Rig;
   gun: THREE.Group;
   gunLight: THREE.PointLight;
   /** PS1 vertex-snap grid (half the low-res render size), shared by all world materials. */
   snapRes: { value: THREE.Vector2 };
-  /** 0 = relaxed, 1 = fully puckered. Physically pulls the skin (and the ink) toward the hole. */
-  setPucker(amount: number): void;
-  /**
-   * Body pose. `upright` 1 = standing, 0 = bent over the bench (pivots at the waist).
-   * `pantsUp` 1 = jeans on, 0 = bunched at the knees.
-   */
-  setPose(upright: number, pantsUp: number): void;
-  /** Hair meshes, shoulder width and rear proportions for this client. */
-  setLooks(looks: { sex: 'f' | 'm'; hair: string; hairColor: string }, body: { width: number; depth: number }): void;
-  /** Bodybuilder flex: 0 = relaxed, 1 = full flex (the rear swells). */
-  setFlex(amount: number): void;
   /** Recompute the camera's projection after the zoom or the window changes. `fov` is the landscape FOV. */
   setFov(fov: number): void;
   resize(): void;
@@ -185,125 +166,32 @@ function ps1Snap(mat: THREE.Material, snapRes: { value: THREE.Vector2 }): void {
   };
 }
 
-export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture): World {
-  const renderer = new THREE.WebGLRenderer({ antialias: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  container.appendChild(renderer.domElement);
+/** One client body: rear (paintable), torso, head and hair, arms, legs, jeans. */
+export interface Rig {
+  /** Moves as a unit when the customer squirms or walks. */
+  customer: THREE.Group;
+  /** Hip pivots; rotate on X to swing the legs while waddling. */
+  legs: THREE.Group[];
+  /** The paintable mesh (raycast target). Lives on HI_RES_LAYER. */
+  canvasMesh: THREE.Mesh;
+  /** Mesh materials that should follow the customer's skin tone. */
+  skinMaterials: THREE.MeshStandardMaterial[];
+  shirtMaterial: THREE.MeshStandardMaterial;
+  hairMaterial: THREE.MeshStandardMaterial;
+  /** 0 = relaxed, 1 = fully puckered. Physically pulls the skin (and the ink) toward the hole. */
+  setPucker(amount: number): void;
+  /**
+   * Body pose. `upright` 1 = standing, 0 = bent over the bench (pivots at the waist).
+   * `pantsUp` 1 = jeans on, 0 = bunched at the knees.
+   */
+  setPose(upright: number, pantsUp: number): void;
+  /** Hair meshes, shoulder width and rear proportions for this client. */
+  setLooks(looks: { sex: 'f' | 'm'; hair: string; hairColor: string }, body: { width: number; depth: number }): void;
+  /** Bodybuilder flex: 0 = relaxed, 1 = full flex (the rear swells). */
+  setFlex(amount: number): void;
+}
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#120d16');
-  scene.fog = new THREE.Fog('#120d16', 12, 26);
-
-  // Fixed position, near head-on, long lens. Zoom changes only the FOV: moving the camera
-  // or steepening its angle would parallax-warp strokes drawn across the crease, so what
-  // the player draws on screen wouldn't match what gets scored.
-  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 60);
-  camera.position.copy(CAMERA_POS);
-  camera.lookAt(CAMERA_TARGET);
-
-  // ---------- Lighting ----------
-  // Lights must see both layers or the crisp pass would render unlit.
-  const hemi = new THREE.HemisphereLight('#ffe9d6', '#2a1830', 0.9);
-  const key = new THREE.SpotLight('#fff1e0', 60, 16, Math.PI / 6, 0.5, 1.4);
-  key.position.set(2.2, 5, 4);
-  key.target.position.set(0, -0.2, 0);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  key.shadow.bias = -0.0004;
-  key.shadow.camera.layers.enableAll();
-  const rim = new THREE.PointLight('#ff3fa4', 14, 9);
-  rim.position.set(-3, 2.5, -3);
-  const fill = new THREE.PointLight('#6fc3ff', 5, 10);
-  fill.position.set(3.5, 0.5, 2);
-  for (const l of [hemi, key, rim, fill]) l.layers.enableAll();
-  scene.add(hemi, key, key.target, rim, fill);
-
-  // ---------- Room ----------
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 30, 30, 30),
-    new THREE.MeshStandardMaterial({ map: woodFloor(), roughness: 0.8 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = FLOOR_Y;
-  floor.receiveShadow = true;
-  scene.add(floor);
-
-  const wallMat = new THREE.MeshStandardMaterial({ color: '#2c2236', roughness: 0.95 });
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), wallMat);
-  back.position.set(0, FLOOR_Y + 4.5, -6.5);
-  back.receiveShadow = true;
-  scene.add(back);
-  for (const side of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), wallMat);
-    w.position.set(side * 5.5, FLOOR_Y + 4.5, 0);
-    w.rotation.y = -side * Math.PI / 2;
-    scene.add(w);
-  }
-
-  const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(6.4, 0.8),
-    new THREE.MeshBasicMaterial({ map: neonSign('CHEEKY BUSINESS', '#ff3fa4'), toneMapped: false }),
-  );
-  sign.position.set(0, 2.6, -6.45);
-  scene.add(sign);
-
-  // Back-wall posters flank the client, where they're visible during play. Side-wall ones
-  // show during walk-ins (the entrance camera is wider). Unlit, so the dim room can't mute them.
-  const POSTER_W = 1.9;
-  const POSTER_H = 2.2;
-  const posters: [string[], string, string, number, number, number][] = [
-    [['TATTOOS', 'ARE', 'PERMANENT'], '#f4e04d', '#1b1b1b', -3.45, 1.05, -6.44],
-    [['NO', 'REFUNDS'], '#1b1b1b', '#f4e04d', 3.45, 1.05, -6.44],
-    [['NO SITTING', 'ON THE', 'ART'], '#f2f2f2', '#1b1b1b', -3.45, -1.45, -6.44],
-    [['DO NOT', 'FART ON', 'ARTIST'], '#ff8a3c', '#1b1b1b', 3.45, -1.45, -6.44],
-    [['WE DO', 'NOT DO', 'FACES'], '#e94b3c', '#ffffff', -5.45, 0.6, -2.6],
-    [['TIP', 'YOUR', 'ARTIST'], '#3cc3e9', '#ffffff', 5.45, 0.6, -2.6],
-    [['CRACK', 'OF DAWN', 'SPECIAL'], '#2fd58a', '#1b1b1b', -5.45, 0.6, 0.4],
-  ];
-  for (const [lines, bg, fg, x, y, z] of posters) {
-    const p = new THREE.Mesh(
-      new THREE.PlaneGeometry(POSTER_W, POSTER_H),
-      new THREE.MeshBasicMaterial({ map: poster(lines, bg, fg), toneMapped: false, fog: false }),
-    );
-    p.position.set(x, y, z);
-    if (Math.abs(x) > 5) p.rotation.y = -Math.sign(x) * Math.PI / 2;
-    scene.add(p);
-  }
-
-  // Bench the customer bends over.
-  const leather = new THREE.MeshStandardMaterial({ color: '#6a1f2e', roughness: 0.4, metalness: 0.05 });
-  const bench = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 2.8), leather);
-  bench.position.set(0, -1.45, -2.3);
-  bench.castShadow = bench.receiveShadow = true;
-  scene.add(bench);
-  const chrome = new THREE.MeshStandardMaterial({ color: '#c9c9d4', roughness: 0.25, metalness: 0.9 });
-  for (const [x, z] of [[-0.8, -1.1], [0.8, -1.1], [-0.8, -3.5], [0.8, -3.5]]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.75, 6), chrome);
-    leg.position.set(x, FLOOR_Y + 0.87, z);
-    scene.add(leg);
-  }
-
-  // Ink caps tray, for set dressing. Kept behind the customer's plane (z < 0) because the
-  // crisp pass draws the skin over everything in the low-res pass.
-  const trayZ = -0.9;
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), chrome);
-  tray.position.set(2.6, -0.9, trayZ);
-  scene.add(tray);
-  const capColors = ['#111', '#c0182c', '#1f6fd6', '#21a35a', '#f2c61f'];
-  capColors.forEach((c, i) => {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
-    cap.position.set(2.3 + i * 0.15, -0.84, trayZ);
-    scene.add(cap);
-  });
-  const trayStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 6), chrome);
-  trayStand.position.set(2.6, FLOOR_Y + 1.25, trayZ);
-  scene.add(trayStand);
-
-  // ---------- Customer ----------
+function buildRig(scene: THREE.Scene, paintTexture: THREE.Texture, chrome: THREE.Material): Rig {
   const customer = new THREE.Group();
   scene.add(customer);
 
@@ -534,6 +422,136 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
     thighMat.color.copy(pantsUp > 0.5 ? denimColor : skinColor);
   }
 
+  return {
+    customer, legs, canvasMesh, skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial,
+    setPucker, setPose, setLooks, setFlex,
+  };
+}
+
+export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture, partnerTexture: THREE.Texture): World {
+  const renderer = new THREE.WebGLRenderer({ antialias: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#120d16');
+  scene.fog = new THREE.Fog('#120d16', 12, 26);
+
+  // Fixed position, near head-on, long lens. Zoom changes only the FOV: moving the camera
+  // or steepening its angle would parallax-warp strokes drawn across the crease, so what
+  // the player draws on screen wouldn't match what gets scored.
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 60);
+  camera.position.copy(CAMERA_POS);
+  camera.lookAt(CAMERA_TARGET);
+
+  // ---------- Lighting ----------
+  // Lights must see both layers or the crisp pass would render unlit.
+  const hemi = new THREE.HemisphereLight('#ffe9d6', '#2a1830', 0.9);
+  const key = new THREE.SpotLight('#fff1e0', 60, 16, Math.PI / 6, 0.5, 1.4);
+  key.position.set(2.2, 5, 4);
+  key.target.position.set(0, -0.2, 0);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.bias = -0.0004;
+  key.shadow.camera.layers.enableAll();
+  const rim = new THREE.PointLight('#ff3fa4', 14, 9);
+  rim.position.set(-3, 2.5, -3);
+  const fill = new THREE.PointLight('#6fc3ff', 5, 10);
+  fill.position.set(3.5, 0.5, 2);
+  for (const l of [hemi, key, rim, fill]) l.layers.enableAll();
+  scene.add(hemi, key, key.target, rim, fill);
+
+  // ---------- Room ----------
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 30, 30, 30),
+    new THREE.MeshStandardMaterial({ map: woodFloor(), roughness: 0.8 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = FLOOR_Y;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#2c2236', roughness: 0.95 });
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), wallMat);
+  back.position.set(0, FLOOR_Y + 4.5, -6.5);
+  back.receiveShadow = true;
+  scene.add(back);
+  for (const side of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), wallMat);
+    w.position.set(side * 5.5, FLOOR_Y + 4.5, 0);
+    w.rotation.y = -side * Math.PI / 2;
+    scene.add(w);
+  }
+
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(6.4, 0.8),
+    new THREE.MeshBasicMaterial({ map: neonSign('CHEEKY BUSINESS', '#ff3fa4'), toneMapped: false }),
+  );
+  sign.position.set(0, 2.6, -6.45);
+  scene.add(sign);
+
+  // Back-wall posters flank the client, where they're visible during play. Side-wall ones
+  // show during walk-ins (the entrance camera is wider). Unlit, so the dim room can't mute them.
+  const POSTER_W = 1.9;
+  const POSTER_H = 2.2;
+  const posters: [string[], string, string, number, number, number][] = [
+    [['TATTOOS', 'ARE', 'PERMANENT'], '#f4e04d', '#1b1b1b', -3.45, 1.05, -6.44],
+    [['NO', 'REFUNDS'], '#1b1b1b', '#f4e04d', 3.45, 1.05, -6.44],
+    [['NO SITTING', 'ON THE', 'ART'], '#f2f2f2', '#1b1b1b', -3.45, -1.45, -6.44],
+    [['DO NOT', 'FART ON', 'ARTIST'], '#ff8a3c', '#1b1b1b', 3.45, -1.45, -6.44],
+    [['WE DO', 'NOT DO', 'FACES'], '#e94b3c', '#ffffff', -5.45, 0.6, -2.6],
+    [['TIP', 'YOUR', 'ARTIST'], '#3cc3e9', '#ffffff', 5.45, 0.6, -2.6],
+    [['CRACK', 'OF DAWN', 'SPECIAL'], '#2fd58a', '#1b1b1b', -5.45, 0.6, 0.4],
+  ];
+  for (const [lines, bg, fg, x, y, z] of posters) {
+    const p = new THREE.Mesh(
+      new THREE.PlaneGeometry(POSTER_W, POSTER_H),
+      new THREE.MeshBasicMaterial({ map: poster(lines, bg, fg), toneMapped: false, fog: false }),
+    );
+    p.position.set(x, y, z);
+    if (Math.abs(x) > 5) p.rotation.y = -Math.sign(x) * Math.PI / 2;
+    scene.add(p);
+  }
+
+  // Bench the customer bends over.
+  const leather = new THREE.MeshStandardMaterial({ color: '#6a1f2e', roughness: 0.4, metalness: 0.05 });
+  const bench = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 2.8), leather);
+  bench.position.set(0, -1.45, -2.3);
+  bench.castShadow = bench.receiveShadow = true;
+  scene.add(bench);
+  const chrome = new THREE.MeshStandardMaterial({ color: '#c9c9d4', roughness: 0.25, metalness: 0.9 });
+  for (const [x, z] of [[-0.8, -1.1], [0.8, -1.1], [-0.8, -3.5], [0.8, -3.5]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.75, 6), chrome);
+    leg.position.set(x, FLOOR_Y + 0.87, z);
+    scene.add(leg);
+  }
+
+  // Ink caps tray, for set dressing. Kept behind the customer's plane (z < 0) because the
+  // crisp pass draws the skin over everything in the low-res pass.
+  const trayZ = -0.9;
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), chrome);
+  tray.position.set(2.6, -0.9, trayZ);
+  scene.add(tray);
+  const capColors = ['#111', '#c0182c', '#1f6fd6', '#21a35a', '#f2c61f'];
+  capColors.forEach((c, i) => {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
+    cap.position.set(2.3 + i * 0.15, -0.84, trayZ);
+    scene.add(cap);
+  });
+  const trayStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 6), chrome);
+  trayStand.position.set(2.6, FLOOR_Y + 1.25, trayZ);
+  scene.add(trayStand);
+
+  // ---------- Customers ----------
+  // The main client, plus a partner rig that only appears for couples jobs.
+  const rig = buildRig(scene, paintTexture, chrome);
+  const partner = buildRig(scene, partnerTexture, chrome);
+  partner.customer.visible = false;
+
   // ---------- Tattoo gun ----------
   const gun = new THREE.Group();
   const gunMetal = new THREE.MeshStandardMaterial({ color: '#7a7f8c', roughness: 0.3, metalness: 0.85 });
@@ -590,8 +608,6 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   resize();
 
   return {
-    renderer, scene, camera, customer, legs, canvasMesh,
-    skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial, gun, gunLight, snapRes,
-    setPucker, setPose, setLooks, setFlex, setFov, resize,
+    ...rig, partner, renderer, scene, camera, gun, gunLight, snapRes, setFov, resize,
   };
 }

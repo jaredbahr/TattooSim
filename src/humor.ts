@@ -232,6 +232,36 @@ export const HUMOR = {
     "Can you look shocked? Like, more shocked? Perfect.",
     'Smash that like button. Not the butt. The button.',
   ],
+  /** Couples, walking in. {d} = the design. */
+  coupleRequest: [
+    "We want matching {d}s. It's our anniversary.",
+    'Matching {d}s. Our therapist said to try something new together.',
+    "Two {d}s. Identical. If mine's better, I win the divorce.",
+    "We're getting matching {d}s instead of a wedding. Cheaper.",
+    "Couple's special. One {d} each. Make them twins.",
+  ],
+  coupleGood: [
+    "They match! We're never breaking up now. Legally we can't.",
+    "Look, babe! We're a set!",
+    'Perfectly matched. Like us. Mostly.',
+    'This is more romantic than our wedding.',
+    'Twins! Butt twins!',
+  ],
+  coupleBad: [
+    "We're going to need couples counseling. And a dermatologist.",
+    'Well. At least we match. In being bad.',
+    'Neither of us looks good. Which is fair, I guess.',
+    'I married you for better or worse. This is worse.',
+    "Our anniversary is ruined. And so are our butts.",
+  ],
+  /** One partner came out clearly better. {better}, {worse} = names. */
+  coupleMismatch: [
+    "Why is {better}'s nicer than mine?!",
+    "{better} got the good one. Of course {better} got the good one.",
+    "{worse} is never going to let this go. Neither is {better}.",
+    "So {better} gets art and {worse} gets a crime scene. Cool. Cool cool cool.",
+    "We said MATCHING. {worse}'s looks like a rough draft of {better}'s.",
+  ],
 } as const;
 
 export type HumorKind = keyof typeof HUMOR;
