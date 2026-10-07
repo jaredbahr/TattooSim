@@ -37,6 +37,49 @@ export interface Customer {
   originalDesign?: Design;
   /** A returning client you botched: fix the old design, or black it out. */
   coverUp?: 'fix' | 'blackout';
+  /** Boss clients have their own disruptive behavior and pay double. */
+  boss?: BossId;
+}
+
+export type BossId = 'bodybuilder' | 'grandma' | 'influencer';
+
+export const BOSSES: Record<BossId, { name: string; sex: Sex; trait: string; request: string; job?: JobKind }> = {
+  bodybuilder: {
+    name: 'Big Brad', sex: 'm', trait: 'Bodybuilder · flexes without warning', job: 'cheek',
+    request: "I need something big. Like me. Don't mind the flexing. I don't control it anymore.",
+  },
+  grandma: {
+    name: 'Grandma Ruth', sex: 'f', trait: 'Never stops talking',
+    request: "My grandson dared me. I'm 81. I don't lose dares. Now, did I ever tell you about—",
+  },
+  influencer: {
+    name: 'Kaylee', sex: 'f', trait: 'Influencer · filming everything',
+    request: "Hey guys! So I'm getting a butt tattoo for content. Make it pop. Like, literally.",
+  },
+};
+
+const bossBag = new ShuffleBag(Object.keys(BOSSES) as BossId[]);
+
+/** Build a boss client. Bosses pay double and bring their own chaos. */
+export function makeBoss(day: number, rand: () => number = Math.random, id: BossId = bossBag.next()): Customer {
+  const b = BOSSES[id];
+  const base = makeCustomer(day, rand, [], { job: b.job, sex: b.sex, surprise: false, mindChange: false });
+  const looks = { ...base.looks };
+  if (id === 'grandma') Object.assign(looks, { hair: 'bun', hairColor: '#d6d6d6', glasses: true, lips: '#c0406a' });
+  if (id === 'bodybuilder') Object.assign(looks, { hair: 'spiky', facial: 'none', shirt: '#d4a72c' });
+  if (id === 'influencer') Object.assign(looks, { hair: 'long', hairColor: '#e0c26a', earrings: true, shirt: '#ff3fa4' });
+  return {
+    ...base,
+    name: b.name,
+    looks,
+    request: b.request,
+    trait: b.trait,
+    boss: id,
+    body: id === 'bodybuilder' ? { width: 1.12, depth: 1.22 } : base.body,
+    squirm: id === 'bodybuilder' ? 0.1 : base.squirm,
+    sensitivity: id === 'bodybuilder' ? 0.2 : base.sensitivity,
+    generosity: base.generosity * 2,
+  };
 }
 
 /** A botched job, remembered so the client can come back for a cover-up. */

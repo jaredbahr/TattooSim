@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { buildWorld, CAMERA_POS, HI_RES_LAYER, ZOOM } from './scene';
 import { BRUSHES, GRID, SkinPainter, drawReferenceCard, targetMask, toleranceFor } from './painter';
 import {
-  makeCustomer, makeReturningCustomer, reactionFor, reviewFor,
+  makeBoss, makeCustomer, makeReturningCustomer, reactionFor, reviewFor,
   type Customer, type CustomerOptions, type Regret,
 } from './customers';
 import { makeLogo } from './logo';
@@ -66,6 +66,9 @@ const state = {
   returnedToday: false,
   /** "Before" photo of the current cover-up client's old work. */
   coverUpSnap: null as HTMLCanvasElement | null,
+  /** Seconds until the boss's next disruption; and the bodybuilder's flex (0..1). */
+  bossTimer: 0,
+  flex: 0,
   day: 1,
   clientIndex: 0,
   cash: 0,
@@ -358,7 +361,11 @@ function nextClient(): void {
     && regretIdx >= 0 && Math.random() < 0.5;
   let regret: Regret | null = null;
   let c: Customer;
-  if (returning) {
+  // From day 2, the last client of the day is usually a boss.
+  const bossTime = state.day >= 2 && state.clientIndex === state.clientsToday - 1 && Math.random() < 0.75;
+  if (bossTime) {
+    c = makeBoss(state.day);
+  } else if (returning) {
     regret = state.regrets.splice(regretIdx, 1)[0];
     c = makeReturningCustomer(regret);
     state.returnedToday = true;
@@ -391,7 +398,8 @@ function showIntro(): void {
        ${portraitHtml('intro-portrait', 80)}
        <div><h2>${escapeHtml(c.name)}</h2><div class="trait">${escapeHtml(c.trait)}</div>
        <div class="job-tag job-${c.job.kind}">${escapeHtml(c.job.label)}</div>
-       ${c.coverUp ? '<div class="job-tag job-cover">COVER-UP · 1.5× PAY</div>' : ''}</div>
+       ${c.coverUp ? '<div class="job-tag job-cover">COVER-UP · 1.5× PAY</div>' : ''}
+       ${c.boss ? '<div class="job-tag job-boss">BOSS · 2× PAY</div>' : ''}</div>
      </div>
      <div class="quote">"${escapeHtml(c.request)}"</div>
      <div style="display:flex;gap:14px;align-items:center">
@@ -437,6 +445,9 @@ function startInking(): void {
   state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
   state.squirmBoost = 0;
   state.changeAt = c.mindChange ? total * (0.4 + Math.random() * 0.2) : -1;
+  state.bossTimer = 2.5;
+  state.flex = 0;
+  if (c.boss) state.gagAt = -1; // bosses are chaotic enough
   setZoom(c.job.zoom === 'close' ? 1 : 0);
   state.pan.set(0, 0);
   // Fine needle for detail work, Liner for the big pieces.
@@ -479,6 +490,36 @@ function playSideGag(gag: SideGag): void {
   state.quipTimer = Math.max(state.quipTimer, gag.lines.length * 1.5 + 2);
 }
 
+/** A boss does their thing. Called on a timer while inking. */
+function bossAct(): void {
+  const c = state.customer!;
+  if (c.boss === 'bodybuilder') {
+    state.flex = 1;
+    pointerDown = false; // the flex knocks the gun off
+    painter.lift();
+    flinch.vel.y += 1.2;
+    say(`${c.name}: "${aside('bossFlex')}"`, 1300);
+    state.bossTimer = 3.2 + Math.random() * 2;
+  } else if (c.boss === 'grandma') {
+    const el = document.createElement('div');
+    el.className = 'chat';
+    el.textContent = aside('bossGrandma');
+    // Right over the work area, where it's most in the way.
+    el.style.left = `${15 + Math.random() * 40}%`;
+    el.style.top = `${18 + Math.random() * 45}%`;
+    $('chatter').appendChild(el);
+    window.setTimeout(() => el.remove(), 4000);
+    state.bossTimer = 1.6 + Math.random() * 1.4;
+  } else if (c.boss === 'influencer') {
+    const f = $('flash');
+    f.classList.remove('pop');
+    void f.offsetWidth;
+    f.classList.add('pop');
+    say(`${c.name}: "${aside('bossInfluencer')}"`, 1600);
+    state.bossTimer = 3.5 + Math.random() * 2.5;
+  }
+}
+
 /** The client changes their mind: swap the design, keep the old one for forgiveness. */
 function changeMind(): void {
   const c = state.customer!;
@@ -516,6 +557,7 @@ function finishJob(): void {
   audio.setBuzzing(false);
   stage.classList.remove('inking');
   $('bubble').classList.add('hidden');
+  $('chatter').replaceChildren();
   state.zoomTarget = c.job.zoom === 'close' ? 1 : 0;
 
   const ink = painter.inkMask(c.job);
@@ -533,7 +575,7 @@ function finishJob(): void {
   state.cash += pay;
   state.dayCash += pay;
   state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
-  if (!c.surprise && !c.coverUp && score.score < 60) {
+  if (!c.surprise && !c.coverUp && !c.boss && score.score < 60) {
     state.regrets.push({ customer: c, score: score.score, ink: painter.exportInk(), snap: painter.snapshot(c.job, 200) });
   }
   updateTopHud();
@@ -848,6 +890,8 @@ function frame(dt: number): void {
   if (inking && Math.random() < dt * squirm * 0.25) state.clench = 1;
   state.clench = Math.max(0, state.clench - dt * 2.5);
   world.canvasMesh.scale.x = 1 - 0.05 * Math.sin(state.clench * Math.PI);
+  state.flex = Math.max(0, state.flex - dt * 1.4);
+  world.setFlex(Math.sin(Math.min(1, state.flex) * Math.PI * 0.5));
 
   if (inking && c) {
     state.winkTimer -= dt * (0.4 + c.puckeriness + state.pain);
@@ -955,6 +999,10 @@ function frame(dt: number): void {
     }
 
     state.timeLeft -= dt;
+    if (c.boss) {
+      state.bossTimer -= dt;
+      if (state.bossTimer <= 0) bossAct();
+    }
     if (state.changeAt > 0 && state.timeLeft <= state.changeAt) {
       state.changeAt = -1;
       changeMind();

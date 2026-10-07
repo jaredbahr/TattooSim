@@ -156,6 +156,8 @@ export interface World {
   setPose(upright: number, pantsUp: number): void;
   /** Hair meshes, shoulder width and rear proportions for this client. */
   setLooks(looks: { sex: 'f' | 'm'; hair: string; hairColor: string }, body: { width: number; depth: number }): void;
+  /** Bodybuilder flex: 0 = relaxed, 1 = full flex (the rear swells). */
+  setFlex(amount: number): void;
   /** Recompute the camera's projection after the zoom or the window changes. `fov` is the landscape FOV. */
   setFov(fov: number): void;
   resize(): void;
@@ -509,7 +511,13 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
     bun.visible = h === 'bun';
     for (const p of pigtails) p.visible = h === 'pigtails';
     shoulders.scale.x = looks.sex === 'f' ? 0.86 : 1;
-    rear.scale.set(body.width, 1, body.depth);
+    bodyShape = body;
+    setFlex(0);
+  }
+
+  let bodyShape = { width: 1, depth: 1 };
+  function setFlex(f: number): void {
+    rear.scale.set(bodyShape.width * (1 + 0.08 * f), 1 + 0.06 * f, bodyShape.depth * (1 + 0.18 * f));
   }
 
   function setPose(upright: number, pantsUp: number): void {
@@ -584,6 +592,6 @@ export function buildWorld(container: HTMLElement, paintTexture: THREE.Texture):
   return {
     renderer, scene, camera, customer, legs, canvasMesh,
     skinMaterials: [skin, thighMat], shirtMaterial, hairMaterial, gun, gunLight, snapRes,
-    setPucker, setPose, setLooks, setFov, resize,
+    setPucker, setPose, setLooks, setFlex, setFov, resize,
   };
 }

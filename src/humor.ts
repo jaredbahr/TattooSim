@@ -208,6 +208,30 @@ export const HUMOR = {
     'There is no fixing that. Paint it black. Heart-shaped.',
     "I can't look at it anymore. Neither can anyone else. Solid heart.",
   ],
+  /** Boss: the bodybuilder, mid-flex. */
+  bossFlex: [
+    '*FLEX*', 'Do you even lift?', 'Sorry. Muscle memory.', "Can't help it. Leg day was yesterday.",
+    'Is it getting bigger? It is. You are welcome.', '*involuntary pose*',
+  ],
+  /** Boss: grandma's never-ending stories. */
+  bossGrandma: [
+    "Did I ever tell you about my second husband? Well, he had a tattoo just like this, except it was on his—",
+    "In my day we didn't have tattoos, we had DISCIPLINE, and also one tattoo, of a sailor, long story—",
+    'My grandson says this is "fire." I told him the fire was in 1974 and we are not discussing it—',
+    "Oh, you remind me of my friend Doris. She passed. Not from this. Well, partly from this—",
+    "Now don't tell my bridge club. Actually tell them. Tell them EVERYTHING—",
+    'This reminds me of the war. Not a specific war. Just war in general—',
+    "I knit you a scarf. It's in my purse. Don't look in my purse—",
+  ],
+  /** Boss: the influencer, filming. */
+  bossInfluencer: [
+    '*click* Content!',
+    'Can you hold the needle, like, more aesthetically?',
+    'Hey guys, welcome back to my channel. Today we are getting a butt tattoo—',
+    "*flash* Sorry, that's for the thumbnail.",
+    "Can you look shocked? Like, more shocked? Perfect.",
+    'Smash that like button. Not the butt. The button.',
+  ],
 } as const;
 
 export type HumorKind = keyof typeof HUMOR;
