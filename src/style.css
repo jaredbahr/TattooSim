@@ -299,3 +299,5 @@ kbd {
 .paper .subhead { margin: 0 0 8px; font-style: italic; font-size: 14px; color: #1b1b1b; line-height: 1.3; }
 .paper .brief { margin: 0 0 6px; font-size: 12px; color: #333; line-height: 1.3; border-top: 1px solid #9a927e; padding-top: 5px; }
 .paper .classified { font-family: 'Courier New', monospace; font-size: 11px; }
+#ref-card.swapped { animation: swap 0.6s ease-out; }
+@keyframes swap { 0% { transform: rotate(-1.5deg) scale(1.15); box-shadow: 0 0 0 6px var(--yellow); } 100% { transform: rotate(-1.5deg) scale(1); } }

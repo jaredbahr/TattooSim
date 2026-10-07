@@ -4,7 +4,7 @@
 import { designsFor, type Design } from './designs';
 import { JOBS, type JobKind, type JobSpec } from './jobs';
 import { randomLooks, type Looks, type Sex } from './portrait';
-import { ShuffleBag } from './humor';
+import { ShuffleBag, aside } from './humor';
 
 export interface Customer {
   name: string;
@@ -29,6 +29,23 @@ export interface Customer {
   /** Multiplier on the tip they leave. */
   generosity: number;
   trait: string;
+  /** "Surprise me": no reference; graded on vibes. */
+  surprise?: boolean;
+  /** The design they'll switch to partway through. */
+  mindChange?: Design;
+  /** Set once they've changed their mind: what they originally asked for. */
+  originalDesign?: Design;
+}
+
+/** Placeholder design for "surprise me" clients: nothing to trace. */
+export function surpriseDesign(job: JobKind): Design {
+  return {
+    id: 'surprise',
+    name: 'Surprise',
+    job,
+    tip: 'Anything you want. They trust you. Unwisely.',
+    draw() {},
+  };
 }
 
 const NAMES: Record<Sex, string[]> = {
@@ -125,6 +142,9 @@ export interface CustomerOptions {
   sex?: Sex;
   /** Names already used today, so a day never has two Darlenes. */
   avoidNames?: string[];
+  /** Twists: force on/off. Undefined = roll for it (the tutorial passes false for both). */
+  surprise?: boolean;
+  mindChange?: boolean;
 }
 
 /**
@@ -137,10 +157,19 @@ export function makeCustomer(
   avoid: string[] = [],
   opts: CustomerOptions = {},
 ): Customer {
-  const kind = opts.job ?? pickJob(day, rand);
+  // Twists: about 10% "surprise me", about 12% change their mind partway through.
+  const twist = rand();
+  const surprise = opts.surprise ?? twist < 0.1;
+  const changes = !surprise && (opts.mindChange ?? (twist >= 0.1 && twist < 0.22));
+  let kind = opts.job ?? pickJob(day, rand);
+  if (surprise && kind === 'moon') kind = 'cheek';
   const all = designsFor(kind);
   const pool = all.filter((d) => !avoid.includes(d.id));
-  const design = all.find((d) => d.id === opts.design) ?? pick(pool.length ? pool : all, rand);
+  const design = surprise
+    ? surpriseDesign(kind)
+    : all.find((d) => d.id === opts.design) ?? pick(pool.length ? pool : all, rand);
+  const others = all.filter((d) => d.id !== design.id && !d.request);
+  const mindChange = changes && others.length ? pick(others, rand) : undefined;
   const trait = TRAITS.find((t) => t.label === opts.trait) ?? pick(TRAITS, rand);
   const skin = pick(SKINS, rand);
   const dayPressure = Math.min(0.35, (day - 1) * 0.07);
@@ -156,7 +185,9 @@ export function makeCustomer(
     looks: randomLooks(skin, sex, rand),
     job: JOBS[kind],
     design,
-    request: design.request ?? fillTemplate(pick(openers, rand), design, sex),
+    request: surprise ? aside('surpriseRequest') : design.request ?? fillTemplate(pick(openers, rand), design, sex),
+    surprise: surprise || undefined,
+    mindChange,
     skin,
     hairiness: sex === 'f' ? trait.hair * 0.4 : trait.hair,
     squirm: Math.min(1, trait.squirm + dayPressure),

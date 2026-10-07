@@ -69,6 +69,8 @@ export function gradeFor(score: number): Grade {
 /**
  * @param strayInk ink area (in grid cells) that fell outside the scored crop entirely.
  *   It can never hit the design, so it only drags precision down.
+ * @param forgiven ink near these cells isn't held against accuracy (e.g. the design a client
+ *   asked for before changing their mind). Coverage is still judged on `target` alone.
  */
 export function scoreMasks(
   ink: Uint8Array,
@@ -76,6 +78,7 @@ export function scoreMasks(
   size: number,
   tolerance = 2,
   strayInk = 0,
+  forgiven?: Uint8Array,
 ): ScoreBreakdown {
   if (ink.length !== size * size || target.length !== size * size) {
     throw new Error(`mask length must be size*size (${size * size})`);
@@ -86,7 +89,12 @@ export function scoreMasks(
     return { precision: 0, recall: 0, score: 0, grade: 'F' };
   }
 
-  const targetNear = dilate(target, size, tolerance);
+  let allowed = target;
+  if (forgiven) {
+    allowed = target.slice();
+    for (let i = 0; i < allowed.length; i++) allowed[i] |= forgiven[i];
+  }
+  const targetNear = dilate(allowed, size, tolerance);
   const inkNear = dilate(ink, size, tolerance);
 
   let inkHits = 0;

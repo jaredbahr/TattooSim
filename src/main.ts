@@ -10,7 +10,7 @@ import { makeCustomer, reactionFor, reviewFor, type Customer, type CustomerOptio
 import { makeLogo } from './logo';
 import { DESIGNS } from './designs';
 import { buildShareCard, shareCard } from './share';
-import { scoreMasks, type ScoreBreakdown } from './scoring';
+import { countOn, gradeFor, scoreMasks, type ScoreBreakdown } from './scoring';
 import { drawPortrait, moodForPain, moodForScore, type Mood } from './portrait';
 import { PS1Pipeline } from './ps1';
 import { GunAudio } from './audio';
@@ -19,7 +19,9 @@ import { frontPage } from './newspaper';
 
 const CLIENTS_PER_DAY = 5;
 /** The very first client of a fresh game is a softball. */
-const TUTORIAL_CLIENT: CustomerOptions = { job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart' };
+const TUTORIAL_CLIENT: CustomerOptions = {
+  job: 'cheek', trait: 'Calm as a cucumber', design: 'bigheart', surprise: false, mindChange: false,
+};
 const BEST_KEY = 'cheeky-business:best-day';
 /** Where customers stand while waiting off-screen, and how fast they waddle. */
 const OFFSTAGE_X = 7.5;
@@ -77,6 +79,8 @@ const state = {
   gagAt: -1,
   /** Extra squirm from a side gag, decays to 0. */
   squirmBoost: 0,
+  /** Seconds left on the clock when a mind-changer swaps designs (-1 = never). */
+  changeAt: -1,
   walkX: -OFFSTAGE_X,
   walkTarget: -OFFSTAGE_X,
   onArrive: null as (() => void) | null,
@@ -244,6 +248,22 @@ function portraitHtml(id: string, size = 72): string {
   return `<canvas id="${id}" class="portrait" style="width:${size}px;height:${size}px"></canvas>`;
 }
 
+/** Reference card, or a big "?" for surprise-me clients. */
+function drawCard(canvas: HTMLCanvasElement, c: Customer, overlay?: HTMLCanvasElement): void {
+  drawReferenceCard(canvas, c, painter.outline, overlay);
+  if (!c.surprise) return;
+  const ctx = canvas.getContext('2d')!;
+  const S = canvas.width;
+  ctx.save();
+  ctx.fillStyle = overlay ? 'rgba(255, 63, 164, 0.85)' : '#ff3fa4';
+  ctx.font = `bold ${Math.round(S * 0.55)}px Impact, "Arial Black", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (overlay) ctx.globalAlpha = 0.5;
+  ctx.fillText('?', S / 2, S / 2);
+  ctx.restore();
+}
+
 // ---------- Flow ----------
 function showTitle(): void {
   state.phase = 'title';
@@ -342,14 +362,14 @@ function showIntro(): void {
      <div class="quote">"${escapeHtml(c.request)}"</div>
      <div style="display:flex;gap:14px;align-items:center">
        <canvas id="intro-ref" width="200" height="200" style="width:150px;border-radius:10px;border:3px solid #fff"></canvas>
-       <p style="margin:0"><strong>${escapeHtml(c.design.name)}.</strong> ${escapeHtml(c.design.tip)}<br/><br/>
+       <p style="margin:0"><strong>${c.surprise ? 'Surprise me.' : escapeHtml(c.design.name) + '.'}</strong> ${escapeHtml(c.design.tip)}<br/><br/>
        ${escapeHtml(c.job.blurb)}<br/><br/>You have <strong>${state.timeLimit + c.job.timeBonus}s</strong>.
        <span class="small-print">${escapeHtml(aside('introAside'))}</span></p>
      </div>`,
     [{ label: "Let's ink 🖊️", primary: true, onClick: startInking }],
   );
   drawPortrait(card.querySelector<HTMLCanvasElement>('#intro-portrait')!, c.looks, 'nervous');
-  drawReferenceCard(card.querySelector<HTMLCanvasElement>('#intro-ref')!, c, painter.outline);
+  drawCard(card.querySelector<HTMLCanvasElement>('#intro-ref')!, c);
 }
 
 function startInking(): void {
@@ -364,7 +384,7 @@ function startInking(): void {
   $('ref-name').textContent = `${c.design.name} · ${c.job.label}`;
   $('ref-tip').textContent = c.design.tip;
   $('fine-print').textContent = aside('hudFinePrint');
-  drawReferenceCard($<HTMLCanvasElement>('ref-card'), c, painter.outline);
+  drawCard($<HTMLCanvasElement>('ref-card'), c);
 
   state.timeLimit = Math.max(28, 50 - (state.day - 1) * 5);
   state.timeLeft = state.timeLimit + c.job.timeBonus;
@@ -377,6 +397,7 @@ function startInking(): void {
   const tutorial = state.day === 1 && state.clientIndex === 0;
   state.gagAt = !tutorial && Math.random() < 0.75 ? total * (0.3 + Math.random() * 0.4) : -1;
   state.squirmBoost = 0;
+  state.changeAt = c.mindChange ? total * (0.4 + Math.random() * 0.2) : -1;
   setZoom(c.job.zoom === 'close' ? 1 : 0);
   state.pan.set(0, 0);
   // Fine needle for detail work, Liner for the big pieces.
@@ -419,6 +440,28 @@ function playSideGag(gag: SideGag): void {
   state.quipTimer = Math.max(state.quipTimer, gag.lines.length * 1.5 + 2);
 }
 
+/** The client changes their mind: swap the design, keep the old one for forgiveness. */
+function changeMind(): void {
+  const c = state.customer!;
+  if (!c.mindChange) return;
+  c.originalDesign = c.design;
+  c.design = c.mindChange;
+  c.mindChange = undefined;
+  const d = c.design.name;
+  const line = aside('mindChange')
+    .replaceAll('{d}', d.toLowerCase())
+    .replaceAll('{D}', d.charAt(0).toUpperCase() + d.slice(1));
+  say(`${c.name}: "${line}"`, 2600);
+  $('ref-name').textContent = `${c.design.name} · ${c.job.label}`;
+  $('ref-tip').textContent = 'They changed their mind. The old one stays on, of course.';
+  drawCard($<HTMLCanvasElement>('ref-card'), c);
+  const card = $('ref-card');
+  card.classList.remove('swapped');
+  void card.offsetWidth;
+  card.classList.add('swapped');
+  state.quipTimer = Math.max(state.quipTimer, 4);
+}
+
 function payFor(score: number, c: Customer): number {
   if (score < 30) return 0;
   return Math.round((40 + score * 1.6) * c.generosity * c.job.payMult);
@@ -436,14 +479,27 @@ function finishJob(): void {
   state.zoomTarget = c.job.zoom === 'close' ? 1 : 0;
 
   const ink = painter.inkMask(c.job);
-  const score = scoreMasks(ink.mask, targetMask(c), GRID, toleranceFor(c.job), ink.stray);
+  let score: ScoreBreakdown;
+  if (c.surprise) {
+    // No reference, so the grade is pure vibes. Doing nothing gets nothing.
+    const inked = countOn(ink.mask) + ink.stray;
+    const vibes = inked < 40 ? 0 : Math.round(30 + Math.random() * 70);
+    score = { precision: 1, recall: 1, score: vibes, grade: gradeFor(vibes) };
+  } else {
+    const forgiven = c.originalDesign ? targetMask({ ...c, design: c.originalDesign }) : undefined;
+    score = scoreMasks(ink.mask, targetMask(c), GRID, toleranceFor(c.job), ink.stray, forgiven);
+  }
   const pay = payFor(score.score, c);
   state.cash += pay;
   state.dayCash += pay;
   state.results.push({ customer: c, score, pay, snap: painter.snapshot(c.job, 200) });
   updateTopHud();
 
-  const quote = reactionFor(score.score, c);
+  const quote = !c.surprise
+    ? reactionFor(score.score, c)
+    : score.score === 0 ? aside('surpriseNothing')
+    : score.score >= 75 ? aside('surpriseGood')
+    : score.score >= 45 ? aside('surpriseMid') : aside('surpriseBad');
   const lastOfDay = state.clientIndex + 1 >= state.clientsToday;
   const card = showModal(
     `<div class="client" style="gap:14px">
@@ -453,14 +509,16 @@ function finishJob(): void {
      <div class="quote">"${escapeHtml(quote)}"</div>
      <div class="compare">
        <figure><canvas id="res-ink" width="260" height="260"></canvas>Your work</figure>
-       <figure><canvas id="res-overlay" width="260" height="260"></canvas>vs. the request</figure>
+       <figure><canvas id="res-overlay" width="260" height="260"></canvas>${c.surprise ? 'vs. "surprise me"' : 'vs. the request'}</figure>
      </div>
      <div class="score-row">
        <div class="grade ${score.grade}">${score.grade}</div>
        <dl class="stats">
-         <dt>Likeness</dt><dd>${score.score}%</dd>
-         <dt>Accuracy</dt><dd>${Math.round(score.precision * 100)}% <span class="muted">of your ink was on-design</span></dd>
-         <dt>Coverage</dt><dd>${Math.round(score.recall * 100)}% <span class="muted">of the design got inked</span></dd>
+         ${c.surprise
+           ? `<dt>Vibes</dt><dd>${score.score}% <span class="muted">(there was no design, so it's all vibes)</span></dd>`
+           : `<dt>Likeness</dt><dd>${score.score}%</dd>
+         <dt>Accuracy</dt><dd>${Math.round(score.precision * 100)}% <span class="muted">of your ink was on-design${c.originalDesign ? ' (old design forgiven)' : ''}</span></dd>
+         <dt>Coverage</dt><dd>${Math.round(score.recall * 100)}% <span class="muted">of the ${c.originalDesign ? 'new ' : ''}design got inked</span></dd>`}
          <dt>Paid</dt><dd style="color:${pay ? 'var(--green)' : 'var(--red)'}">${pay ? `$${pay}` : escapeHtml(aside('refusedToPay'))}</dd>
        </dl>
      </div>`,
@@ -471,7 +529,7 @@ function finishJob(): void {
           const big = painter.snapshot(c.job, 450);
           const overlay = document.createElement('canvas');
           overlay.width = overlay.height = 450;
-          drawReferenceCard(overlay, c, painter.outline, big);
+          drawCard(overlay, c, big);
           const cardImg = buildShareCard({ customer: c, score, quote, yourWork: big, overlay });
           shareCard(cardImg, c.name)
             .then((how) => { if (how === 'downloaded') say('Saved! Check your downloads.', 1800); })
@@ -492,7 +550,7 @@ function finishJob(): void {
   drawPortrait(card.querySelector<HTMLCanvasElement>('#res-portrait')!, c.looks, moodForScore(score.score));
   const snap = painter.snapshot(c.job, 260);
   card.querySelector<HTMLCanvasElement>('#res-ink')!.getContext('2d')!.drawImage(snap, 0, 0);
-  drawReferenceCard(card.querySelector<HTMLCanvasElement>('#res-overlay')!, c, painter.outline, snap);
+  drawCard(card.querySelector<HTMLCanvasElement>('#res-overlay')!, c, snap);
 }
 
 function endDay(): void {
@@ -818,6 +876,10 @@ function frame(dt: number): void {
     }
 
     state.timeLeft -= dt;
+    if (state.changeAt > 0 && state.timeLeft <= state.changeAt) {
+      state.changeAt = -1;
+      changeMind();
+    }
     if (state.gagAt > 0 && state.timeLeft <= state.gagAt) {
       state.gagAt = -1;
       playSideGag(nextSideGag());

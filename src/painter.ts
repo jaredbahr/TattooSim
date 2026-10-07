@@ -250,8 +250,9 @@ export class SkinPainter {
     const y = (1 - uv.y) * TEX_SIZE;
     const from = this.last ?? { x, y };
     const dist = Math.hypot(x - from.x, y - from.y);
-    // A big jump means the mesh lurched or the cursor left and re-entered; don't draw a line across.
-    if (dist > TEX_SIZE * 0.08) {
+    // Only a huge jump is a glitch (e.g. a flinch lurch); leaving the skin already lifts the
+    // stroke. Fast swipes on slow phones can legitimately cover ~1/4 of the canvas per frame.
+    if (dist > TEX_SIZE * 0.3) {
       this.last = { x, y };
       return;
     }

@@ -91,6 +91,22 @@ describe('scoreMasks', () => {
     expect(messy.score).toBeLessThan(clean.score);
   });
 
+  it('forgives ink on a design the client abandoned, but still wants the new one covered', () => {
+    const oldDesign = ring(10);
+    const newDesign = ring(25);
+    // Player inked the old design fully and the new one fully.
+    const ink = oldDesign.slice();
+    for (let i = 0; i < ink.length; i++) ink[i] |= newDesign[i];
+    const strict = scoreMasks(ink, newDesign, SIZE);
+    const forgiving = scoreMasks(ink, newDesign, SIZE, 2, 0, oldDesign);
+    expect(forgiving.precision).toBe(1);
+    expect(forgiving.score).toBeGreaterThan(strict.score);
+    // Only the old design inked: no coverage of the new one, so it still scores badly.
+    const onlyOld = scoreMasks(oldDesign.slice(), newDesign, SIZE, 2, 0, oldDesign);
+    expect(onlyOld.recall).toBeLessThan(0.2);
+    expect(onlyOld.score).toBeLessThan(30);
+  });
+
   it('rejects mismatched sizes', () => {
     expect(() => scoreMasks(new Uint8Array(4), ring(20), SIZE)).toThrow();
   });

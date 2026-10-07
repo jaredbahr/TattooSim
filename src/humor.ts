@@ -135,6 +135,54 @@ export const HUMOR = {
     'Be gentle.', "I'm ready. I'm not ready.", 'Do your worst. Wait. Do your best.',
     "Don't tell me when you start.", 'Is the door locked? Lock the door.', 'Whenever you are. Take your time. No, hurry.',
   ],
+  /** "Surprise me" clients: what they say walking in. */
+  surpriseRequest: [
+    'Surprise me.',
+    "Dealer's choice. Go nuts. I trust you. Probably a mistake.",
+    'Whatever speaks to you. Just... speak quietly.',
+    "I don't care what it is. Make it mean something. Or don't.",
+    'Freestyle it. I want to be surprised in the mirror.',
+    'Something with a lot of meaning. You pick the meaning.',
+  ],
+  /** Mind-changers, mid-job. {d} = the new design. */
+  mindChange: [
+    'Actually... can you make it a {d} instead?',
+    'Wait. WAIT. Change of plans. {D}.',
+    'My partner just texted. Make it a {d}.',
+    "I've been thinking about it. It's a {d} now.",
+    'Sorry, sorry, I panicked. {D}. Final answer.',
+    'You know what would be funnier? A {d}.',
+  ],
+  /** Surprise-me reactions by how the vibes landed. */
+  surpriseGood: [
+    "I don't know what it is, but it's PERFECT.",
+    'I was surprised. In a good way. I think.',
+    "It's like you looked into my soul. From behind.",
+    "Nobody's going to understand it. That's the point.",
+    'This is what I would have asked for if I knew what to ask for.',
+  ],
+  surpriseMid: [
+    'Huh. Okay. Yeah. Okay.',
+    "It's a choice. You made a choice.",
+    "I'll tell people it's abstract.",
+    "I'm going to need a minute. Maybe a week.",
+    'Bold. Confusing. Mine forever.',
+  ],
+  surpriseBad: [
+    'I said surprise me. Not traumatize me.',
+    "That's not a surprise. That's an ambush.",
+    'I take back the trust.',
+    'I wanted a surprise party, not a crime scene.',
+    'You had total creative freedom and you chose THIS.',
+  ],
+  /** Surprise-me with (almost) no ink. */
+  surpriseNothing: [
+    'You did... nothing? Bold. I hate it. I respect it.',
+    "It's invisible. Like my dad.",
+    'Minimalist. I paid for minimalism.',
+    'A blank canvas. I already HAD a blank canvas.',
+    "I've never felt so seen. Or so un-inked.",
+  ],
 } as const;
 
 export type HumorKind = keyof typeof HUMOR;
